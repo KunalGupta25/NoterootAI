@@ -1,4 +1,4 @@
-export type BuiltinProvider = 'openai' | 'anthropic' | 'gemini' | 'mistral' | 'grok';
+export type BuiltinProvider = 'openai' | 'anthropic' | 'gemini' | 'mistral' | 'groq';
 export type AIProvider = BuiltinProvider | string; // string covers custom provider IDs
 
 export interface ProviderInfo {
@@ -43,13 +43,13 @@ export const BUILTIN_PROVIDERS: Record<BuiltinProvider, ProviderInfo> = {
     keyPlaceholder: 'your key...',
     keyUrl: 'https://console.mistral.ai/api-keys',
   },
-  grok: {
-    label: 'Grok / xAI',
+  groq: {
+    label: 'Groq',
     icon: '⚡',
-    color: '#1da1f2',
-    models: ['grok-3', 'grok-3-mini', 'grok-2-1212', 'grok-2-vision-1212', 'grok-beta'],
-    keyPlaceholder: 'xai-...',
-    keyUrl: 'https://console.x.ai',
+    color: '#f55036',
+    models: ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'mixtral-8x7b-32768', 'gemma2-9b-it', 'deepseek-r1-distill-llama-70b'],
+    keyPlaceholder: 'gsk_...',
+    keyUrl: 'https://console.groq.com/keys',
   },
 };
 

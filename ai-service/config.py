@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""
     gemini_api_key: str = ""
     mistral_api_key: str = ""
-    grok_api_key: str = ""
+    groq_api_key: str = ""
     chroma_persist_dir: str = "./chroma_db"
     default_provider: str = "openai"
     default_embedding_model: str = "text-embedding-3-small"
@@ -17,9 +17,9 @@ class Settings(BaseSettings):
     default_chat_model_anthropic: str = "claude-3-5-haiku-20241022"
     default_chat_model_gemini: str = "gemini-1.5-flash"
     default_chat_model_mistral: str = "mistral-small-latest"
-    default_chat_model_grok: str = "grok-3-mini"
+    default_chat_model_groq: str = "llama-3.3-70b-versatile"
     default_embedding_model_mistral: str = "mistral-embed"
-    default_embedding_model_grok: str = "grok-embedding-latest"
+    default_embedding_model_groq: str = ""
 
     class Config:
         env_file = ".env"

@@ -10,6 +10,7 @@ import AuthPage from './pages/AuthPage';
 import { useEffect } from 'react';
 import { useNoteStore } from './stores/noteStore';
 import { useAuthStore } from './stores/authStore';
+import { useSettingsStore } from './stores/settingsStore';
 
 // Immediately create a new note and redirect to it (so vault stays in sync)
 function NewNotePage() {
@@ -29,6 +30,18 @@ function NewNotePage() {
 
 function App() {
   const token = useAuthStore((state) => state.token);
+  const syncSettings = useSettingsStore((state) => state.syncSettings);
+  const theme = useSettingsStore((state) => state.theme);
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+  }, [theme]);
+
+  useEffect(() => {
+    if (token) {
+      syncSettings();
+    }
+  }, [token, syncSettings]);
 
   return (
     <BrowserRouter>

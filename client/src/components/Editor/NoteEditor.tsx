@@ -102,13 +102,33 @@ function getSlashItems(query: string) {
       command: ({ editor, range }: any) => { editor.chain().focus().deleteRange(range).insertTable({ rows: 3, cols: 5, withHeaderRow: true }).run() } },
 
     // ── Media & Embed ──
-    { title: 'Image', description: 'Embed an image from URL', icon: '🖼️', category: 'Media',
+    { title: 'Image URL', description: 'Embed an image from URL', icon: '🖼️', category: 'Media',
       command: ({ editor, range }: any) => {
         editor.chain().focus().deleteRange(range).run();
         const url = prompt('Enter image URL:');
         if (url) {
           editor.chain().focus().setImage({ src: url }).run();
         }
+      } },
+    { title: 'Upload Image', description: 'Upload from your computer', icon: '📤', category: 'Media',
+      command: ({ editor, range }: any) => {
+        editor.chain().focus().deleteRange(range).run();
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = 'image/*';
+        input.onchange = (e: any) => {
+          const file = e.target.files?.[0];
+          if (file) {
+            const reader = new FileReader();
+            reader.onload = (event) => {
+              if (event.target?.result) {
+                editor.chain().focus().setImage({ src: event.target.result as string }).run();
+              }
+            };
+            reader.readAsDataURL(file);
+          }
+        };
+        input.click();
       } },
     { title: 'Video Embed', description: 'Embed a YouTube or video URL', icon: '🎬', category: 'Media',
       command: ({ editor, range }: any) => {
@@ -384,6 +404,47 @@ export default function NoteEditor({ initialContent, onChange }: { initialConten
     onUpdate: ({ editor }) => {
       if (onChange) {
         onChange(editor.getHTML());
+      }
+    },
+    editorProps: {
+      handleDrop: function(view, event, slice, moved) {
+        if (!moved && event.dataTransfer && event.dataTransfer.files && event.dataTransfer.files[0]) {
+          const file = event.dataTransfer.files[0];
+          if (file.type.startsWith('image/')) {
+            event.preventDefault();
+            const reader = new FileReader();
+            reader.onload = (e) => {
+              const src = e.target?.result as string;
+              const { schema } = view.state;
+              const coordinates = view.posAtCoords({ left: event.clientX, top: event.clientY });
+              const node = schema.nodes.image.create({ src });
+              const transaction = view.state.tr.insert(coordinates?.pos || view.state.selection.from, node);
+              view.dispatch(transaction);
+            };
+            reader.readAsDataURL(file);
+            return true;
+          }
+        }
+        return false;
+      },
+      handlePaste: function(view, event, slice) {
+        if (event.clipboardData && event.clipboardData.files && event.clipboardData.files[0]) {
+          const file = event.clipboardData.files[0];
+          if (file.type.startsWith('image/')) {
+            event.preventDefault();
+            const reader = new FileReader();
+            reader.onload = (e) => {
+              const src = e.target?.result as string;
+              const { schema } = view.state;
+              const node = schema.nodes.image.create({ src });
+              const transaction = view.state.tr.replaceSelectionWith(node);
+              view.dispatch(transaction);
+            };
+            reader.readAsDataURL(file);
+            return true;
+          }
+        }
+        return false;
       }
     },
   });

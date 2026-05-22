@@ -194,15 +194,27 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
   },
 
   getNote: async (id: string) => {
-    // Try in-memory first for speed
-    const inMemory = get().notes.find(n => n._id === id);
+    if (!id) return undefined;
+    const idLower = id.toLowerCase();
+    
+    // Try in-memory first for speed (case-insensitive ID)
+    let inMemory = get().notes.find(n => n._id.toLowerCase() === idLower);
     if (inMemory) return inMemory;
+    
+    // Fallback: try case-insensitive Title match
+    inMemory = get().notes.find(n => n.title.toLowerCase() === idLower);
+    if (inMemory) return inMemory;
+
     return (await localforage.getItem<Note>(vaultKey(id))) || undefined;
   },
 
   deleteNote: async (id: string) => {
+    const targetNote = await get().getNote(id);
+    if (!targetNote) return;
+    const actualId = targetNote._id;
+
     const allNotes = get().notes;
-    const toDelete = [id];
+    const toDelete = [actualId];
 
     function collectChildren(parentId: string) {
       allNotes.filter(n => n.parentId === parentId).forEach(child => {
@@ -210,7 +222,7 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
         collectChildren(child._id);
       });
     }
-    collectChildren(id);
+    collectChildren(actualId);
 
     // Sync delete to server
     try {

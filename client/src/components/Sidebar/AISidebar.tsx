@@ -7,6 +7,7 @@ import { BUILTIN_PROVIDERS, isBuiltinProvider } from '../../lib/providerConfig';
 import { AI_URL } from '../../lib/constants';
 import ReactMarkdown from 'react-markdown';
 import { CodeBlock } from '../Markdown/CodeBlock';
+import AgentPanel from './AgentPanel';
 
 interface SuggestResult { note_id: string; title: string; reason: string; score: number; }
 interface Message { role: 'user' | 'assistant'; content: string; }
@@ -395,16 +396,7 @@ export default function AISidebar({ setAiOpen }: { setAiOpen: (open: boolean) =>
 
         {/* === AGENT === */}
         {activeTab === 'Agent' && (
-          <div style={{ padding: '32px 16px', textAlign: 'center' }}>
-            <div style={{ width: '48px', height: '48px', borderRadius: '24px', background: 'var(--surface)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
-              <Bot size={24} style={{ color: 'var(--muted)' }} />
-            </div>
-            <h3 style={{ fontSize: '16px', margin: '0 0 8px', fontFamily: 'var(--font-display)' }}>Autonomous Agent</h3>
-            <p style={{ fontSize: '13px', color: 'var(--muted)', lineHeight: 1.5 }}>
-              The Agent can read, organize, and write notes autonomously based on your instructions.
-            </p>
-            <div style={{ display: 'inline-block', padding: '4px 10px', background: 'var(--accent)', color: 'white', fontSize: '11px', fontWeight: 600, borderRadius: '4px', marginTop: '16px' }}>COMING IN PHASE 3</div>
-          </div>
+          <AgentPanel />
         )}
       </div>
     </>

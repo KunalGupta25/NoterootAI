@@ -1,10 +1,6 @@
 from providers.base import BaseProvider
 from providers.openai_provider import OpenAIProvider
-from providers.gemini_provider import GeminiProvider
 from providers.anthropic_provider import AnthropicProvider
-from providers.mistral_provider import MistralProvider
-from providers.grok_provider import GrokProvider
-from providers.custom_openai_provider import CustomOpenAIProvider
 from config import get_settings
 
 
@@ -22,16 +18,33 @@ def get_provider(
     elif provider_name == "anthropic":
         return AnthropicProvider(api_key=api_key)
     elif provider_name == "gemini":
-        return GeminiProvider(api_key=api_key)
+        return OpenAIProvider(
+            api_key=api_key,
+            base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
+            default_model=settings.default_chat_model_gemini,
+            provider_name="gemini",
+        )
     elif provider_name == "mistral":
-        return MistralProvider(api_key=api_key)
-    elif provider_name in {"grok", "xai"}:
-        return GrokProvider(api_key=api_key)
+        return OpenAIProvider(
+            api_key=api_key,
+            base_url="https://api.mistral.ai/v1",
+            default_model=settings.default_chat_model_mistral,
+            provider_name="mistral",
+        )
+    elif provider_name == "groq":
+        return OpenAIProvider(
+            api_key=api_key,
+            base_url="https://api.groq.com/openai/v1",
+            default_model=settings.default_chat_model_groq,
+            provider_name="groq",
+            default_embedding_model="",
+        )
     elif provider_name == "custom" or custom_base_url:
-        return CustomOpenAIProvider(
+        return OpenAIProvider(
             api_key=api_key,
             base_url=custom_base_url,
             default_model=custom_default_model,
+            provider_name="custom",
         )
     else:
         raise ValueError(f"Unknown provider: {provider_name}")

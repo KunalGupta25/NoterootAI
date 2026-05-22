@@ -2,6 +2,8 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { BuiltinProvider, CustomProviderConfig } from '../lib/providerConfig';
 import { BUILTIN_PROVIDERS } from '../lib/providerConfig';
+import { SYNC_URL } from '../lib/constants';
+import { useAuthStore } from './authStore';
 
 export type { BuiltinProvider };
 export type { CustomProviderConfig };
@@ -51,6 +53,10 @@ interface SettingsState {
   // ── Legacy compat (used in some places still) ─────────────────
   aiProvider: string;
   aiApiKey: string;
+
+  // ── Server Sync ───────────────────────────────────────────────
+  syncSettings: () => Promise<void>;
+  saveSettings: () => Promise<void>;
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -68,8 +74,10 @@ export const useSettingsStore = create<SettingsState>()(
 
       // ── Provider keys ──────────────────────────────────────────
       providerKeys: {},
-      setProviderKey: (provider, key) =>
-        set((s) => ({ providerKeys: { ...s.providerKeys, [provider]: key } })),
+      setProviderKey: (provider, key) => {
+        set((s) => ({ providerKeys: { ...s.providerKeys, [provider]: key } }));
+        get().saveSettings();
+      },
       getProviderKey: (provider) => get().providerKeys[provider] ?? '',
 
       // ── Active provider ────────────────────────────────────────
@@ -82,7 +90,7 @@ export const useSettingsStore = create<SettingsState>()(
         gemini: 'gemini-3.5-flash',
         anthropic: 'claude-sonnet-4-5',
         mistral: 'mistral-large-latest',
-        grok: 'grok-3-mini',
+        groq: 'llama-3.3-70b-versatile',
       },
       setProviderModel: (provider, model) =>
         set((s) => ({ providerModels: { ...s.providerModels, [provider]: model } })),
@@ -100,21 +108,26 @@ export const useSettingsStore = create<SettingsState>()(
         const id = `custom_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
         const newProvider: CustomProviderConfig = { ...config, id };
         set((s) => ({ customProviders: [...s.customProviders, newProvider] }));
+        get().saveSettings();
         return id;
       },
-      updateCustomProvider: (id, updates) =>
+      updateCustomProvider: (id, updates) => {
         set((s) => ({
           customProviders: s.customProviders.map((c) =>
             c.id === id ? { ...c, ...updates } : c
           ),
-        })),
-      removeCustomProvider: (id) =>
+        }));
+        get().saveSettings();
+      },
+      removeCustomProvider: (id) => {
         set((s) => ({
           customProviders: s.customProviders.filter((c) => c.id !== id),
           // If removed provider was active, reset to first configured builtin
           activeProvider:
             s.activeProvider === id ? 'gemini' : s.activeProvider,
-        })),
+        }));
+        get().saveSettings();
+      },
       getCustomProvider: (id) =>
         get().customProviders.find((c) => c.id === id),
 
@@ -146,9 +159,73 @@ export const useSettingsStore = create<SettingsState>()(
       // ── Legacy compat getters ──────────────────────────────────
       get aiProvider() { return get().activeProvider; },
       get aiApiKey() { return get().getActiveApiKey(); },
+
+      // ── Server Sync ──────────────────────────────────────────────
+      syncSettings: async () => {
+        const token = useAuthStore.getState().token;
+        if (!token) return;
+        try {
+          const res = await fetch(`${SYNC_URL}/api/auth/settings`, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          if (res.ok) {
+            const data = await res.json();
+            set((s) => {
+              const newKeys = { ...s.providerKeys, ...(data.providerKeys || {}) };
+              const newCustoms = data.customProviders || s.customProviders;
+              
+              // Auto-select a configured provider if the active one isn't configured
+              let newActive = s.activeProvider;
+              const isActiveConfigured = (newActive in BUILTIN_PROVIDERS) 
+                ? !!newKeys[newActive as BuiltinProvider]
+                : !!newCustoms.find((c: any) => c.id === newActive)?.apiKey;
+                
+              if (!isActiveConfigured) {
+                const firstConfiguredBuiltin = (Object.keys(BUILTIN_PROVIDERS) as BuiltinProvider[]).find(p => !!newKeys[p]);
+                if (firstConfiguredBuiltin) {
+                  newActive = firstConfiguredBuiltin;
+                } else if (newCustoms.length > 0) {
+                  newActive = newCustoms[0].id;
+                }
+              }
+
+              return {
+                providerKeys: newKeys,
+                customProviders: newCustoms,
+                activeProvider: newActive
+              };
+            });
+          }
+        } catch (e) {
+          console.error('Failed to sync settings from server', e);
+        }
+      },
+      saveSettings: async () => {
+        const token = useAuthStore.getState().token;
+        if (!token) return;
+        const state = get();
+        try {
+          await fetch(`${SYNC_URL}/api/auth/settings`, {
+            method: 'PUT',
+            headers: { 
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`
+            },
+            body: JSON.stringify({
+              providerKeys: state.providerKeys,
+              customProviders: state.customProviders
+            })
+          });
+        } catch (e) {
+          console.error('Failed to save settings to server', e);
+        }
+      },
     }),
     {
       name: 'noteroot-settings-v2',
+      partialize: (state) => Object.fromEntries(
+        Object.entries(state).filter(([key]) => !['providerKeys', 'customProviders'].includes(key))
+      ),
       // Migrate from old v1 format if present
       migrate: (persisted: any, version: number) => {
         if (version === 0 && persisted?.aiProvider && persisted?.aiApiKey) {

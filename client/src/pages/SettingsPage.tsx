@@ -1,4 +1,3 @@
-import { useTheme } from '../hooks/useTheme';
 import { useSettingsStore } from '../stores/settingsStore';
 import { BUILTIN_PROVIDERS, BUILTIN_PROVIDER_IDS, type BuiltinProvider, type CustomProviderConfig } from '../lib/providerConfig';
 import { Eye, EyeOff, Check, Plus, Trash2, ExternalLink, ChevronDown, ChevronUp, Settings } from 'lucide-react';
@@ -263,7 +262,7 @@ function AddCustomProviderForm({ onAdd }: { onAdd: () => void }) {
     <div style={{ border: '1.5px dashed #8b5cf680', borderRadius: '10px', padding: '16px', background: '#8b5cf605' }}>
       <div style={{ fontWeight: 600, fontSize: '14px', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
         🔌 Add Custom Provider
-        <span style={{ fontSize: '11px', color: 'var(--muted)', fontWeight: 400 }}>OpenAI-compatible API (Ollama, OpenRouter, Groq…)</span>
+        <span style={{ fontSize: '11px', color: 'var(--muted)', fontWeight: 400 }}>OpenAI-compatible API (Ollama, OpenRouter, Grok…)</span>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
@@ -285,8 +284,7 @@ function AddCustomProviderForm({ onAdd }: { onAdd: () => void }) {
 }
 
 export default function SettingsPage() {
-  const { theme, setTheme } = useTheme();
-  const { customProviders } = useSettingsStore();
+  const { theme, setTheme, customProviders } = useSettingsStore();
   const [showAddCustom, setShowAddCustom] = useState(false);
 
   return (

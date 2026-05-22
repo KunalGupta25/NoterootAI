@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Any
 
 # ── Embed ──────────────────────────────────────────────────────────
 class EmbedRequest(BaseModel):
@@ -18,6 +18,31 @@ class EmbedResponse(BaseModel):
     note_id: str
     chunks: int
     status: str = "ok"
+
+# ── Agent ─────────────────────────────────────────────────────────
+class AgentMessage(BaseModel):
+    role: str             # "user" | "assistant" | "tool"
+    content: Optional[str] = None
+    tool_call_id: Optional[str] = None
+    tool_name: Optional[str] = None
+    tool_calls: Optional[List[Dict[str, Any]]] = None
+
+class AgentToolResult(BaseModel):
+    tool_call_id: str
+    tool_name: str
+    result: Any
+    error: Optional[str] = None
+
+class AgentRequest(BaseModel):
+    messages: List[AgentMessage]
+    provider: str = "openai"
+    model: Optional[str] = None
+    api_key: Optional[str] = None
+    custom_base_url: Optional[str] = None
+    context_note_id: Optional[str] = None
+    temperature: float = 0.5
+    max_tokens: int = 4096
+    tool_result: Optional[AgentToolResult] = None  # Send after user approves a tool
 
 # ── Chat ───────────────────────────────────────────────────────────
 class Message(BaseModel):

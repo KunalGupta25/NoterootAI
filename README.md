@@ -1,6 +1,6 @@
 # 🌿 NoteRootAI
 
-NoteRootAI is a state-of-the-art, local-first, AI-powered Knowledge Management System (KMS) inspired by Notion and Obsidian. It is designed to act as your second brain, offering a rich markdown editor, interactive knowledge graph visualization, offline-first capabilities with cloud synchronization, and a deeply integrated AI assistant capable of contextual Retrieval-Augmented Generation (RAG).
+NoteRootAI is a state-of-the-art, local-first, AI-powered Knowledge Management System (KMS) inspired by Notion and Obsidian. It is designed to act as your second brain, offering a rich markdown editor, interactive knowledge graph visualization, offline-first capabilities with cloud synchronization, and a deeply integrated AI assistant capable of contextual Retrieval-Augmented Generation (RAG) and autonomous agentic workflows.
 
 ---
 
@@ -11,7 +11,7 @@ NoteRootAI is a state-of-the-art, local-first, AI-powered Knowledge Management S
 4. [Data Flow Diagram (DFD)](#-data-flow-diagram-dfd)
 5. [User Flow](#-user-flow)
 6. [Features](#-features-added-so-far)
-7. [What Needs to be Added](#-what-needs-to-be-added-phase-3)
+7. [What Needs to be Added](#-what-needs-to-be-added)
 8. [How to Start & Use the Project](#-how-to-start--use-the-project)
 
 ---
@@ -19,17 +19,17 @@ NoteRootAI is a state-of-the-art, local-first, AI-powered Knowledge Management S
 ## 🎯 What is NoteRootAI?
 
 NoteRootAI bridges the gap between traditional note-taking apps and advanced AI research tools. 
-- **Offline-First:** All notes are saved instantly to your local browser using IndexedDB, allowing you to write without an internet connection.
+- **Offline-First:** All notes and media are saved instantly to your local browser using IndexedDB, allowing you to write without an internet connection.
 - **Knowledge Graph:** Like Obsidian, your notes are visually connected in a graph. Typing `[[Note Title]]` automatically forms a relationship mapped in Neo4j.
-- **AI RAG (Retrieval-Augmented Generation):** An embedded AI service automatically chunks and vectorizes your notes. You can chat with your knowledge base, and the AI will reference your specific notes to answer questions.
-- **Bring Your Own Key (BYOK):** Supports OpenAI, Anthropic, Gemini, Mistral, and Grok out of the box.
+- **AI RAG & Autonomous Agent:** An embedded AI service automatically chunks and vectorizes your notes. You can chat with your knowledge base, or empower the AI Agent to autonomously execute tools to create, read, append, update, and organize your vault for you!
+- **Bring Your Own Key (BYOK):** Supports OpenAI, Anthropic, Gemini, Mistral, Groq, and entirely custom OpenAI-compatible local endpoints (like Ollama or OpenRouter) natively out of the box.
 
 ---
 
 ## 🏗️ Architecture
 
 NoteRootAI is built on a robust three-tier architecture ensuring separation of concerns:
-1. **Client (Frontend):** React + Vite, Tailwind CSS, Tiptap (Editor), Cytoscape (Graph).
+1. **Client (Frontend):** React + Vite, Tailwind CSS, Tiptap (Editor), Cytoscape (Graph), Zustand (State), and a secure Iframe Sandbox for Plugin/Agent execution.
 2. **Server (Backend Core):** Node.js + Express, MongoDB Atlas, Neo4j, Socket.io.
 3. **AI Service (Microservice):** Python FastAPI, ChromaDB (Local Vector DB).
 
@@ -41,6 +41,7 @@ graph TD
         Editor[Tiptap Editor]
         LocalDB[(IndexedDB / localforage)]
         Store[Zustand State]
+        Sandbox[Iframe Execution Sandbox]
     end
 
     %% Server Tier
@@ -59,8 +60,9 @@ graph TD
     subgraph AIService [Python AI Microservice]
         FastAPI[FastAPI Server]
         RAG[RAG Engine]
+        Agent[Autonomous Agent Engine]
         Chroma[(ChromaDB Vectors)]
-        LLM((LLM Providers\nOpenAI/Gemini))
+        LLM((LLM Providers\nOpenAI/Groq/Gemini/Custom))
     end
 
     %% Connections
@@ -71,10 +73,12 @@ graph TD
     Auth <--> Mongo
     Auth <--> Neo4j
 
-    Store <-->|Auto-Embed / Chat| FastAPI
+    Store <-->|Auto-Embed / Chat / Agent| FastAPI
+    Sandbox <-->|Secure API Bridge| Store
     FastAPI <--> Chroma
     FastAPI <--> LLM
     RAG <--> Chroma
+    Agent <-->|Triggers Tools| Sandbox
 ```
 
 ---
@@ -90,7 +94,7 @@ d:\NoteRoot2\
 │   │   ├── components/         # UI Components (Editor, Layout, Sidebar)
 │   │   ├── pages/              # Route Pages (Dashboard, Graph, Chat)
 │   │   ├── stores/             # Zustand State (noteStore, authStore, settingsStore)
-│   │   └── lib/                # Configs, API connections
+│   │   └── lib/                # Configs, API connections, Plugin Bridge
 │   └── package.json
 │
 ├── server/                     # Node.js + Express API Backend
@@ -103,8 +107,8 @@ d:\NoteRoot2\
 │   └── package.json
 │
 └── ai-service/                 # Python FastAPI AI Microservice
-    ├── providers/              # LLM factory (OpenAI, Gemini, Anthropic)
-    ├── services/               # RAG, Embedding, and Retriever logic
+    ├── providers/              # LLM factory (OpenAI, Gemini, Anthropic, Custom)
+    ├── services/               # RAG, Embedding, Agent Tool definitions
     ├── chroma_db/              # Local persistent vector database
     ├── main.py                 # FastAPI endpoints
     └── requirements.txt
@@ -114,31 +118,29 @@ d:\NoteRoot2\
 
 ## 🔄 Data Flow Diagram (DFD)
 
-This diagram explains how data moves through the system when a user creates a note and interacts with the AI.
+This diagram explains how data moves through the system when a user interacts with the Autonomous Agent.
 
 ```mermaid
 sequenceDiagram
     actor User
-    participant Client as React Client (IndexedDB)
-    participant API as Express API
-    participant DB as MongoDB / Neo4j
+    participant Client as React Client
+    participant Sandbox as Iframe Sandbox
     participant AI as FastAPI Service
-    participant Chroma as ChromaDB
+    participant LLM as External API (Groq/Gemini)
 
-    User->>Client: Types note content
-    Client->>Client: Saves to Local IndexedDB instantly
-    Client-->>API: Background Queue Sync (PUT /notes)
-    API->>DB: Updates MongoDB Document
-    API->>DB: Parses [[links]] & Updates Neo4j Graph
-    
-    Client-->>AI: Debounced Auto-Embed (POST /embed)
-    AI->>Chroma: Chunks note & saves vector embeddings
-    
-    User->>Client: Asks AI a question (Chat)
-    Client->>AI: Sends Query (POST /chat)
-    AI->>Chroma: Semantic Similarity Search
-    Chroma-->>AI: Returns relevant note chunks
-    AI->>User: Streams LLM answer based on chunks
+    User->>Client: "Summarize this note and create a sub-note"
+    Client->>AI: Sends Agent Prompt (POST /agent/chat)
+    AI->>LLM: Requests Tool Execution
+    LLM-->>AI: Yields `read_note` Tool Call
+    AI-->>Client: Forwards Tool Execution Request
+    Client->>Sandbox: Verifies and Executes API Call securely
+    Sandbox-->>Client: Returns Note Content
+    Client->>AI: Sends back Tool Response
+    AI->>LLM: Feeds Content & Requests next step
+    LLM-->>AI: Yields `create_sub_note` Tool Call
+    AI-->>Client: Forwards Execution Request
+    Client->>Client: Updates IndexedDB Instantly
+    Client-->>User: Displays Success in Chat UI
 ```
 
 ---
@@ -147,7 +149,8 @@ sequenceDiagram
 
 ```mermaid
 flowchart TD
-    Start([User Opens App]) --> Auth{Is Logged In?}
+    Start([User Opens App]) --> ThemeSync[Auto-Syncs OS Theme]
+    ThemeSync --> Auth{Is Logged In?}
     Auth -- No --> Login[Login / Sign Up Page]
     Login --> DBAuth[Authenticate via Server]
     DBAuth --> Dashboard
@@ -160,6 +163,7 @@ flowchart TD
     Dashboard --> AIChat[Open AI Chat]
     
     CreateNote --> Editor[Rich Text Editor]
+    Editor --> Paste[Drag & Drop / Paste Local Media]
     Editor --> AutoSave{Auto Save}
     AutoSave -- Local --> IndexedDB[(IndexedDB)]
     AutoSave -- Cloud --> Mongo[(MongoDB Atlas)]
@@ -168,9 +172,9 @@ flowchart TD
     
     Graph --> ViewLinks[Explore Node Relationships]
     
-    AIChat --> AskQ[Ask Question]
-    AskQ --> RAG[RAG retrieves related notes]
-    RAG --> Answer[Receive contextual Answer]
+    AIChat --> AskQ[Ask Agent to do work]
+    AskQ --> Agent[Agent uses Tools to Manipulate Vault]
+    Agent --> Answer[Receive contextual Answer & Updates]
 ```
 
 ---
@@ -178,10 +182,11 @@ flowchart TD
 ## ✨ Features Added So Far
 
 ### Phase 1: Core KMS Foundation (100% Complete)
-- **Modern UI:** Resizable 3-pane layout, dark/light theme, OKLCH color palettes.
+- **Modern UI:** Resizable 3-pane layout, smart automatic OS theme syncing, manual dark/light mode toggle, OKLCH color palettes.
 - **Rich Editor (Tiptap):** 
   - Slash command `/` menu for easy block insertion.
   - Floating bubble menu for text formatting.
+  - Drag-and-Drop and Clipboard Paste support for local Images (instantly saved natively without external buckets).
   - Table context toolbar for row/col management.
   - Math (KaTeX) and Mermaid diagram support.
 - **Knowledge Graph:** Interactive visual graph using Cytoscape.js. Typing `[[Note Title]]` automatically links nodes in the Neo4j database.
@@ -189,19 +194,27 @@ flowchart TD
 - **Authentication:** Secure user login and signup to sync notes across multiple devices.
 
 ### Phase 2: AI Engine & RAG (100% Complete)
-- **BYOK (Bring Your Own Key):** Dynamic factory supporting multiple providers (Gemini, OpenAI, Anthropic, Mistral, Grok).
+- **BYOK (Bring Your Own Key):** Dynamic factory supporting multiple built-in providers (Gemini, OpenAI, Anthropic, Mistral, Groq).
+- **Custom Local LLMs:** Easily add any OpenAI-compatible API (Ollama, OpenRouter, etc.) and specify custom models dynamically.
 - **Auto-Embedding Pipeline:** Background task that chunks your notes and indexes them in a local ChromaDB instance without interrupting your typing.
 - **Semantic Retrieval:** Suggests related notes based on semantic similarity.
 - **Contextual Chat:** Fully streaming AI chat that automatically references your personal vault context.
 
+### Phase 3: Autonomous Agent & Extensibility (100% Complete)
+- **Agentic Workflow:** The AI can now act as an autonomous agent, equipped with a suite of backend tools to actively manage your vault.
+- **Vault Manipulation Tools:** The agent can dynamically `list_all_notes`, `read_note`, `create_note`, `create_sub_note`, `update_note`, `append_to_note`, and `delete_note`.
+- **Smart Note Resolution:** Agent tools feature case-insensitive fallback logic, enabling it to look up notes by both exact ID or natural Language Title automatically.
+- **Secure Sandbox Bridge:** Plugin & Agent code is executed securely using an isolated Iframe Sandbox that safely bridges validated API calls back to the main thread `zustand` store.
+- **Smart Formatting:** Automatic interception and conversion of Agent Markdown outputs into complex TipTap HTML blocks for perfect rendering.
+
 ---
 
-## 🚀 What Needs to be Added (Phase 3)
+## 🚀 What Needs to be Added
 
-We are currently preparing to build **Phase 3 (Extensible Plugin System)**.
-- **Plugin Architecture:** A safe execution sandbox (e.g., Web Workers or iframes) allowing community developers to write custom JS plugins.
-- **Marketplace UI:** A visual settings panel to browse, install, and manage plugins and themes.
-- **Custom Importers/Exporters:** First-party plugins to seamlessly import Markdown folders, Obsidian Vaults, or Notion backups.
+We are currently preparing to build **Phase 4 (Community Ecosystem)**.
+- **Community Plugins:** Extending the Iframe sandbox to allow users to load community-developed JS plugins directly into their workspace.
+- **Marketplace UI:** A visual settings panel to browse, install, and manage plugins and community themes.
+- **Custom Importers/Exporters:** First-party tools to seamlessly import Markdown folders, Obsidian Vaults, or Notion backups.
 - *Minor Refactors:* Upgrade from deprecated `google.generativeai` to `google.genai` SDK in the AI service, and move hardcoded API URLs to `.env` configs.
 
 ---
@@ -260,5 +273,6 @@ We are currently preparing to build **Phase 3 (Extensible Plugin System)**.
 ### Using NoteRootAI
 1. Navigate to `http://localhost:5173` in your browser.
 2. Sign up or log in to a new account.
-3. Click "New Note", give it a title, and use `/` to see all formatting options.
-4. Go to Settings > AI Provider, enter your preferred API key (e.g., Gemini), and start chatting with your notes in the right sidebar!
+3. Click "New Note", give it a title, and use `/` to see all formatting options. You can also paste or drop images instantly.
+4. Go to Settings > AI Providers, enter your preferred API key (e.g., Gemini or Groq) or setup a Custom Ollama endpoint.
+5. Open the right sidebar to start chatting with your Agent to automatically build, retrieve, or organize your knowledge base!

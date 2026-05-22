@@ -74,3 +74,71 @@ export const me = async (req: AuthRequest, res: Response) => {
 
   res.json({ user: publicUser(user) });
 };
+
+import { encrypt, decrypt } from '../utils/crypto';
+
+export const getSettings = async (req: AuthRequest, res: Response) => {
+  try {
+    const user = await User.findById(req.userId);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    // Decrypt built-in provider keys
+    const decryptedKeys: Record<string, string> = {};
+    if (user.providerKeys) {
+      for (const [provider, encryptedKey] of user.providerKeys.entries()) {
+        decryptedKeys[provider] = decrypt(encryptedKey as string);
+      }
+    }
+
+    // Decrypt custom provider API keys
+    const decryptedCustomProviders = (user.customProviders || []).map(cp => {
+      const { apiKey, ...rest } = cp;
+      return {
+        ...rest,
+        apiKey: apiKey ? decrypt(apiKey) : ''
+      };
+    });
+
+    res.json({
+      providerKeys: decryptedKeys,
+      customProviders: decryptedCustomProviders
+    });
+  } catch (error) {
+    console.error('Failed to get settings', error);
+    res.status(500).json({ error: 'Failed to retrieve settings' });
+  }
+};
+
+export const updateSettings = async (req: AuthRequest, res: Response) => {
+  try {
+    const { providerKeys, customProviders } = req.body;
+    const user = await User.findById(req.userId);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    if (providerKeys && typeof providerKeys === 'object') {
+      const encryptedKeys = new Map<string, string>();
+      for (const [provider, key] of Object.entries(providerKeys)) {
+        // Encrypt the raw key before storing
+        encryptedKeys.set(provider, encrypt(String(key)));
+      }
+      user.providerKeys = encryptedKeys;
+    }
+
+    if (Array.isArray(customProviders)) {
+      const encryptedCustomProviders = customProviders.map(cp => {
+        const { apiKey, ...rest } = cp;
+        return {
+          ...rest,
+          apiKey: apiKey ? encrypt(String(apiKey)) : ''
+        };
+      });
+      user.customProviders = encryptedCustomProviders;
+    }
+
+    await user.save();
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Failed to update settings', error);
+    res.status(500).json({ error: 'Failed to update settings' });
+  }
+};

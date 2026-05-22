@@ -37,7 +37,7 @@ async def health_check():
             "anthropic": True,
             "gemini": True,
             "mistral": True,
-            "grok": True,
+            "groq": True,
         },
         vector_store=True,
         notes_indexed=vector_store.count_all()
@@ -87,6 +87,18 @@ async def chat_endpoint(request: ChatRequest):
     """Streaming RAG chat."""
     try:
         generator = chat_rag(request)
+        return StreamingResponse(generator, media_type="text/event-stream")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+from services.agent import run_agent
+from models import AgentRequest
+
+@app.post("/agent")
+async def agent_endpoint(request: AgentRequest):
+    """Streaming Agent chat with tool calling."""
+    try:
+        generator = run_agent(request)
         return StreamingResponse(generator, media_type="text/event-stream")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

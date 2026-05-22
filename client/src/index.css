@@ -1,0 +1,849 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* ── Light mode tokens ── */
+    --bg:      oklch(97.5% 0.005 95);
+    --surface: oklch(100%  0.002 95);
+    --fg:      oklch(20%   0.018 70);
+    --muted:   oklch(48%   0.012 70);
+    --border:  oklch(89%   0.006 95);
+    --accent:  oklch(52%   0.10  28);
+
+    --font-display: 'Iowan Old Style', 'Charter', Georgia, serif;
+    --font-body:    -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    --font-mono:    'JetBrains Mono', 'IBM Plex Mono', ui-monospace, Menlo, monospace;
+
+    --sidebar-width: 280px;
+    --topbar-height: 64px;
+
+    color-scheme: light;
+  }
+
+  /* ── Dark mode tokens ── */
+  [data-theme='dark'] {
+    --bg:      oklch(14%   0.010 265);
+    --surface: oklch(17%   0.012 265);
+    --fg:      oklch(92%   0.006 95);
+    --muted:   oklch(58%   0.008 265);
+    --border:  oklch(25%   0.014 265);
+    --accent:  oklch(68%   0.14  40);
+
+    color-scheme: dark;
+  }
+
+  /* Smooth theme transitions */
+  *, *::before, *::after {
+    transition:
+      background-color 0.2s ease,
+      border-color     0.2s ease,
+      color            0.15s ease;
+  }
+
+  /* But don't transition layout/transform/animation properties */
+  *, *::before, *::after {
+    transition-property:
+      background-color, border-color, color,
+      box-shadow, opacity;
+  }
+
+  * { box-sizing: border-box; }
+  
+  body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--font-body);
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1, h2, h3, h4 {
+    font-family: var(--font-display);
+    font-weight: 600;
+    margin-top: 0;
+  }
+
+  button {
+    cursor: pointer;
+    font-family: var(--font-body);
+    border: 1.5px solid var(--border);
+    background: var(--surface);
+    color: var(--fg);
+    padding: 8px 16px;
+    transition: all 0.2s ease;
+    border-radius: 4px;
+  }
+
+  button:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  button.primary {
+    background: var(--accent);
+    color: white;
+    border-color: var(--accent);
+  }
+
+  button.primary:hover {
+    background: var(--surface);
+    color: var(--accent);
+  }
+}
+
+@layer components {
+  .layout {
+    display: grid;
+    grid-template-columns: var(--sidebar-width) 1fr var(--ai-sidebar-width, 300px);
+    grid-template-rows: var(--topbar-height) 1fr 32px;
+    height: 100vh;
+    transition: grid-template-columns 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  header {
+    grid-column: 1 / -1;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    display: flex;
+    align-items: center;
+    padding: 0 24px;
+    justify-content: space-between;
+  }
+
+  aside.left-sidebar {
+    grid-row: 2;
+    border-right: 1px solid var(--border);
+    background: var(--surface);
+    padding: 24px;
+    overflow-y: auto;
+  }
+
+  aside.right-sidebar {
+    grid-row: 2;
+    border-left: 1px solid var(--border);
+    background: var(--surface);
+    overflow: hidden;
+    transition: width 0.28s cubic-bezier(0.4, 0, 0.2, 1),
+                opacity 0.22s ease,
+                border-color 0.2s ease;
+  }
+
+  aside.right-sidebar.collapsed {
+    border-left-color: transparent;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  main {
+    grid-row: 2;
+    padding: 40px 48px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    min-width: 0;          /* prevents grid blowout */
+    /* NO max-width here — scrollbar stays at the right edge of this grid cell */
+  }
+
+  footer {
+    grid-column: 1 / -1;
+    border-top: 1px solid var(--border);
+    background: var(--surface);
+    padding: 0 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1.5px solid var(--border);
+    padding: 24px;
+    margin-bottom: 24px;
+    border-radius: 8px;
+  }
+
+  .tag {
+    display: inline-block;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    padding: 2px 8px;
+    font-size: 12px;
+    margin-right: 4px;
+    color: var(--muted);
+    border-radius: 4px;
+  }
+  
+  .mono {
+    font-family: var(--font-mono);
+    font-size: 0.85em;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  
+  .kicker {
+    margin-bottom: 16px;
+    color: var(--muted);
+    font-weight: 600;
+  }
+}
+
+@media (max-width: 1024px) {
+  .layout {
+    grid-template-columns: var(--sidebar-width) 1fr;
+    grid-template-rows: var(--topbar-height) 1fr 32px;
+  }
+  aside.right-sidebar {
+    display: none;
+  }
+}
+
+@media (max-width: 768px) {
+  .layout {
+    grid-template-columns: 1fr;
+    grid-template-rows: var(--topbar-height) auto 1fr 32px;
+  }
+  aside.left-sidebar {
+    grid-row: 2;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    height: auto;
+  }
+  main {
+    grid-row: 3;
+    padding: 24px;
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--muted);
+}
+
+/* ── Command Palette animations ── */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-12px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0)     scale(1); }
+}
+
+/* ── Page Mention Chip (@reference) ── */
+.page-mention-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 8px 1px 6px;
+  margin: 0 1px;
+  background: var(--bg);
+  border: 1.5px solid var(--border);
+  border-radius: 5px;
+  font-size: 0.88em;
+  font-family: var(--font-body);
+  color: var(--accent);
+  cursor: pointer;
+  white-space: nowrap;
+  vertical-align: middle;
+  user-select: none;
+  transition: background 0.15s, border-color 0.15s, transform 0.1s;
+}
+.page-mention-chip:hover {
+  border-color: var(--accent);
+  transform: translateY(-1px);
+}
+
+/* ═══════════════════════════════════════════════
+   Tiptap / ProseMirror Editor Styles
+   ═══════════════════════════════════════════════ */
+
+.ProseMirror {
+  outline: none;
+  min-height: 500px;
+  color: var(--fg);
+  font-family: var(--font-body);
+  line-height: 1.75;
+}
+
+.ProseMirror p.is-editor-empty:first-child::before {
+  color: var(--muted);
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
+
+/* ── Block-level hover effect ── */
+.ProseMirror > *:not(pre) {
+  position: relative;
+  transition: background 0.1s;
+  border-radius: 4px;
+  padding-left: 4px;
+}
+
+.ProseMirror > *:not(pre):hover {
+  background: var(--bg);
+}
+
+.ProseMirror > *.ProseMirror-selectednode {
+  outline: 2px solid var(--accent);
+  border-radius: 4px;
+}
+
+/* ── Block handle (drag grip) ── */
+.prose-wrapper {
+  position: relative;
+}
+
+.block-handle {
+  position: absolute;
+  left: -32px;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  color: var(--muted);
+  cursor: grab;
+  opacity: 0;
+  transition: opacity 0.15s, background 0.15s, color 0.15s;
+  z-index: 10;
+  background: transparent;
+  border: none;
+  padding: 0;
+}
+
+.block-handle:hover {
+  background: var(--bg);
+  color: var(--accent);
+  opacity: 1 !important;
+}
+
+.block-handle:active {
+  cursor: grabbing;
+}
+
+.prose-wrapper:hover .block-handle {
+  opacity: 0.5;
+}
+
+/* ── Block context menu ── */
+.block-menu {
+  position: absolute;
+  z-index: 100;
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+  padding: 6px;
+  min-width: 200px;
+  animation: blockMenuIn 0.12s ease-out;
+}
+
+@keyframes blockMenuIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.block-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  border: none !important;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--fg);
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.1s, color 0.1s;
+}
+
+.block-menu-item:hover {
+  background: var(--bg);
+  color: var(--accent);
+  border: none !important;
+}
+
+.block-menu-shortcut {
+  margin-left: auto;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--muted);
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.block-menu-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 4px 0;
+}
+
+.block-menu-sub {
+  padding: 4px 0 4px 8px;
+  border-left: 2px solid var(--border);
+  margin-left: 8px;
+  margin-top: 4px;
+}
+
+.block-menu-sub .block-menu-item {
+  font-size: 12px;
+  padding: 5px 10px;
+}
+
+/* ═══════════════════════════════════════════════
+   Table Styles (Notion-like)
+   ═══════════════════════════════════════════════ */
+
+.ProseMirror table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 16px 0;
+  border: 1.5px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+  table-layout: fixed;
+}
+
+.ProseMirror table th,
+.ProseMirror table td {
+  border: 1px solid var(--border);
+  padding: 10px 14px;
+  vertical-align: top;
+  text-align: left;
+  font-size: 14px;
+  min-width: 80px;
+  position: relative;
+}
+
+.ProseMirror table th {
+  background: var(--bg);
+  font-weight: 600;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  border-bottom: 2px solid var(--border);
+}
+
+.ProseMirror table td {
+  background: var(--surface);
+}
+
+.ProseMirror table tr:hover td {
+  background: var(--bg);
+}
+
+/* Selected cell */
+.ProseMirror table .selectedCell {
+  background: color-mix(in oklch, var(--accent) 12%, var(--surface)) !important;
+  border-color: var(--accent);
+}
+
+/* Resize handle */
+.ProseMirror .column-resize-handle {
+  position: absolute;
+  right: -2px;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: var(--accent);
+  pointer-events: auto;
+  cursor: col-resize;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.ProseMirror table:hover .column-resize-handle {
+  opacity: 0.5;
+}
+
+.ProseMirror .column-resize-handle:hover {
+  opacity: 1 !important;
+}
+
+/* ── Headings in editor ── */
+.ProseMirror h1 {
+  font-size: 2em;
+  font-family: var(--font-display);
+  margin: 24px 0 12px;
+  font-weight: 700;
+}
+
+.ProseMirror h2 {
+  font-size: 1.5em;
+  font-family: var(--font-display);
+  margin: 20px 0 10px;
+  font-weight: 600;
+}
+
+.ProseMirror h3 {
+  font-size: 1.25em;
+  font-family: var(--font-display);
+  margin: 16px 0 8px;
+  font-weight: 600;
+}
+
+.ProseMirror h4, .ProseMirror h5, .ProseMirror h6 {
+  font-family: var(--font-display);
+  margin: 12px 0 6px;
+  font-weight: 600;
+}
+
+/* ── Blockquotes / Callouts ── */
+.ProseMirror blockquote {
+  border-left: 3px solid var(--accent);
+  padding: 12px 16px;
+  margin: 16px 0;
+  background: color-mix(in oklch, var(--accent) 6%, var(--surface));
+  border-radius: 0 6px 6px 0;
+  color: var(--fg);
+}
+
+/* ── Code blocks ── */
+.ProseMirror pre, .prose pre {
+  background: oklch(18% 0.01 260);
+  color: oklch(90% 0.01 260);
+  padding: 16px 20px;
+  border-radius: 8px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  overflow-x: auto;
+  margin: 16px 0;
+  line-height: 1.6;
+}
+
+.ProseMirror pre code, .prose pre code {
+  font-family: inherit;
+  background: none;
+  padding: 0;
+  color: inherit;
+  border: none;
+}
+
+/* ── Inline code ── */
+.ProseMirror code, .prose code {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 2px 5px;
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  color: var(--accent);
+}
+
+/* ── Task list ── */
+.ProseMirror ul[data-type="taskList"] {
+  list-style: none;
+  padding-left: 0;
+}
+
+.ProseMirror ul[data-type="taskList"] li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 4px 0;
+}
+
+.ProseMirror ul[data-type="taskList"] li label {
+  margin-top: 3px;
+}
+
+.ProseMirror ul[data-type="taskList"] li label input[type="checkbox"] {
+  accent-color: var(--accent);
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+/* ── Horizontal rule ── */
+.ProseMirror hr {
+  border: none;
+  border-top: 1.5px solid var(--border);
+  margin: 24px 0;
+}
+
+/* ── Links ── */
+.ProseMirror a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+/* ── Lists ── */
+.ProseMirror ul, .ProseMirror ol {
+  padding-left: 24px;
+}
+
+.ProseMirror li {
+  margin: 4px 0;
+}
+
+/* ── Images ── */
+.ProseMirror img {
+  max-width: 100%;
+  border-radius: 8px;
+  margin: 16px 0;
+}
+
+/* ── Details/Toggle ── */
+.ProseMirror details {
+  border: 1.5px solid var(--border);
+  border-radius: 6px;
+  padding: 12px 16px;
+  margin: 16px 0;
+}
+
+.ProseMirror details summary {
+  cursor: pointer;
+  font-weight: 500;
+  color: var(--accent);
+}
+
+.ProseMirror details[open] summary {
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+/* ── Copy Button ── */
+.group:hover .copy-btn,
+.group\/code:hover .copy-btn {
+  opacity: 1 !important;
+}
+
+/* ═══════════════════════════════════════════════
+   Dark Mode Overrides
+   ═══════════════════════════════════════════════ */
+
+/* Tailwind Typography Dark Mode Fix */
+[data-theme='dark'] .prose {
+  --tw-prose-headings: var(--fg);
+  --tw-prose-body: var(--fg);
+  --tw-prose-bold: var(--fg);
+  --tw-prose-quotes: var(--fg);
+  --tw-prose-code: var(--fg);
+  --tw-prose-links: var(--accent);
+}
+
+/* Tippy.js popups (slash command, mention dropdown) */
+[data-theme='dark'] .tippy-box {
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+}
+
+[data-theme='dark'] .tippy-content {
+  padding: 0;
+}
+
+/* Scrollbars */
+[data-theme='dark'] ::-webkit-scrollbar-track {
+  background: var(--bg);
+}
+
+[data-theme='dark'] ::-webkit-scrollbar-thumb {
+  background: var(--border);
+}
+
+[data-theme='dark'] ::-webkit-scrollbar-thumb:hover {
+  background: var(--muted);
+}
+
+/* Text selection */
+[data-theme='dark'] ::selection {
+  background: color-mix(in oklch, var(--accent) 30%, transparent);
+  color: var(--fg);
+}
+
+/* Inputs and textareas */
+[data-theme='dark'] input,
+[data-theme='dark'] textarea,
+[data-theme='dark'] select {
+  background: var(--bg);
+  color: var(--fg);
+  border-color: var(--border);
+  color-scheme: dark;
+}
+
+[data-theme='dark'] input::placeholder,
+[data-theme='dark'] textarea::placeholder {
+  color: var(--muted);
+}
+
+/* KaTeX math rendering */
+[data-theme='dark'] .katex {
+  color: var(--fg);
+}
+
+[data-theme='dark'] .math-node {
+  background: var(--bg);
+  border-color: var(--border);
+}
+
+/* Slash command list panel */
+[data-theme='dark'] .slash-command-list,
+[data-theme='dark'] [class*="slash"] {
+  background: var(--surface);
+  border-color: var(--border);
+}
+
+/* Image embeds — dark border */
+[data-theme='dark'] .ProseMirror img {
+  border: 1px solid var(--border);
+}
+
+/* Iframe embeds */
+[data-theme='dark'] iframe {
+  border-color: var(--border) !important;
+}
+
+/* ── Vault tree active item in dark mode ── */
+[data-theme='dark'] .page-mention-chip {
+  background: color-mix(in oklch, var(--accent) 8%, var(--bg));
+}
+
+/* ── Graph canvas (already dark, ensure it stays) ── */
+[data-theme='dark'] .graph-canvas-container {
+  background: #0d1017;
+}
+
+/* ── Dashboard stat cards ── */
+[data-theme='dark'] [class*="stat-card"],
+[data-theme='dark'] [class*="card"] {
+  background: var(--surface);
+  border-color: var(--border);
+}
+
+/* ── Code block syntax theme stays dark always ── */
+.ProseMirror pre, .prose pre {
+  background: oklch(16% 0.012 260);
+  color: oklch(88% 0.010 260);
+}
+
+/* ── Modal / overlay backdrops ── */
+[data-theme='dark'] [style*="rgba(0,0,0,0.4)"],
+[data-theme='dark'] [style*="rgba(0,0,0,0.5)"] {
+  background: rgba(0, 0, 0, 0.65) !important;
+}
+
+/* ── Button focus rings ── */
+[data-theme='dark'] button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ── Table in dark mode ── */
+[data-theme='dark'] .ProseMirror table td {
+  background: var(--surface);
+}
+
+[data-theme='dark'] .ProseMirror table th {
+  background: var(--bg);
+}
+
+/* ═══════════════════════════════════════════════
+   Selection Toolbar (Bubble Menu)
+   ═══════════════════════════════════════════════ */
+.selection-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.06);
+  backdrop-filter: blur(12px);
+}
+
+.selection-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  background: transparent;
+  color: var(--fg);
+  transition: all 0.15s;
+}
+
+.selection-btn:hover {
+  background: var(--bg) !important;
+}
+
+.selection-btn.active {
+  background: var(--accent) !important;
+  color: white !important;
+}
+
+.selection-toolbar-divider {
+  width: 1px;
+  height: 20px;
+  background: var(--border);
+  margin: 0 2px;
+  flex-shrink: 0;
+}
+
+[data-theme='dark'] .selection-toolbar {
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4), 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+/* ═══════════════════════════════════════════════
+   Table Toolbar
+   ═══════════════════════════════════════════════ */
+.table-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 6px;
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  margin-bottom: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  flex-wrap: wrap;
+}
+
+.table-toolbar button:hover {
+  background: var(--bg) !important;
+}
+
+[data-theme='dark'] .table-toolbar {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}

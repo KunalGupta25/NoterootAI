@@ -1,5 +1,4 @@
 import express from 'express';
-import cors from 'cors';
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import { createServer } from 'http';
@@ -18,13 +17,6 @@ const ALLOWED_ORIGINS = [
   'http://localhost:3000',
 ];
 
-const corsOptions = {
-  origin: true, // Reflect the request origin — works with credentials
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-};
-
 const io = new Server(httpServer, {
   cors: {
     origin: ALLOWED_ORIGINS,
@@ -38,7 +30,7 @@ import graphRouter from './routes/graph';
 import authRouter from './routes/auth';
 import pluginsRouter from './routes/plugins';
 
-// Middleware — manual CORS headers (Express 5 compatible, no wildcard route needed)
+// Middleware — manual CORS headers (Express 5 compatible)
 app.use((req, res, next) => {
   const origin = req.headers.origin;
   if (origin) {
@@ -47,9 +39,9 @@ app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Credentials', 'true');
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization');
-  // Immediately respond to preflight
   if (req.method === 'OPTIONS') {
-    return res.status(204).end();
+    res.status(204).end();
+    return;
   }
   next();
 });

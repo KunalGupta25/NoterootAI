@@ -2,12 +2,12 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install dependencies
-COPY requirements.txt .
+# Copy and install dependencies (paths relative to repo root = build context)
+COPY ai-service/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy source
-COPY . .
+# Copy source code
+COPY ai-service/ .
 
 # Create chroma data directory
 RUN mkdir -p /data/chroma_db

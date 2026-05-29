@@ -49,25 +49,25 @@ io.on('connection', (socket) => {
 
 import './neo4j'; // Initialize Neo4j driver
 
-// Database Connection
+// Database Connection — start server immediately so Railway health check passes
 const PORT = process.env.PORT || 5000;
 const MONGODB_URI = process.env.MONGODB_URI;
 
+// Always start listening right away (Railway requires the port to be bound quickly)
+httpServer.listen(PORT, () => {
+  console.log(`Server is running on port ${PORT}`);
+});
+
+// Connect to MongoDB in the background (non-fatal if it fails)
 if (MONGODB_URI) {
   mongoose
     .connect(MONGODB_URI)
     .then(() => {
       console.log('Connected to MongoDB Atlas');
-      httpServer.listen(PORT, () => {
-        console.log(`Server is running on port ${PORT}`);
-      });
     })
     .catch((error) => {
       console.error('MongoDB connection error:', error);
     });
 } else {
-  console.log('No MONGODB_URI provided. Starting server without DB connection for now.');
-  httpServer.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
-  });
+  console.log('No MONGODB_URI provided. Running without DB connection.');
 }

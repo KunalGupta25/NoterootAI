@@ -11,6 +11,15 @@ import { useEffect } from 'react';
 import { useNoteStore } from './stores/noteStore';
 import { useAuthStore } from './stores/authStore';
 import { useSettingsStore } from './stores/settingsStore';
+import { usePluginStore } from './stores/pluginStore';
+import PluginRuntime from './plugins/runtime/PluginRuntime';
+import { PluginOverlays } from './plugins/slots/PluginOverlays';
+
+// Built-in Plugins
+import { markdownImporterPlugin } from './plugins/builtin/markdownImporter';
+import { zipImporterPlugin } from './plugins/builtin/zipImporter';
+import { tabManagerPlugin } from './plugins/builtin/tabManager';
+import { noteDownloaderPlugin } from './plugins/builtin/noteDownloader';
 
 // Immediately create a new note and redirect to it (so vault stays in sync)
 function NewNotePage() {
@@ -32,6 +41,7 @@ function App() {
   const token = useAuthStore((state) => state.token);
   const syncSettings = useSettingsStore((state) => state.syncSettings);
   const theme = useSettingsStore((state) => state.theme);
+  const { plugins, isLoaded, initPlugins } = usePluginStore();
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
@@ -40,8 +50,27 @@ function App() {
   useEffect(() => {
     if (token) {
       syncSettings();
+      if (!isLoaded) {
+        initPlugins();
+      }
     }
-  }, [token, syncSettings]);
+  }, [token, syncSettings, isLoaded, initPlugins]);
+
+  // Init PluginRuntime once plugins are loaded from storage
+  useEffect(() => {
+    if (isLoaded) {
+      // 1. Init community plugins (this clears the registry)
+      PluginRuntime.init(plugins.filter(p => p.source === 'community')).then(() => {
+        // 2. Manually register and execute built-in plugins if enabled
+        const enabledBuiltins = plugins.filter(p => p.source === 'builtin' && p.enabled).map(p => p.id);
+        
+        if (enabledBuiltins.includes('core-markdown-importer')) markdownImporterPlugin();
+        if (enabledBuiltins.includes('core-zip-importer')) zipImporterPlugin();
+        if (enabledBuiltins.includes('core-tab-manager')) tabManagerPlugin();
+        if (enabledBuiltins.includes('core-note-downloader')) noteDownloaderPlugin();
+      });
+    }
+  }, [isLoaded, plugins]);
 
   return (
     <BrowserRouter>
@@ -58,6 +87,7 @@ function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>
+      <PluginOverlays />
     </BrowserRouter>
   );
 }

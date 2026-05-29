@@ -4,7 +4,6 @@ import SelectionToolbar from './SelectionToolbar';
 import TableToolbar from './TableToolbar';
 import { useEditor, EditorContent, ReactRenderer } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
-import Underline from '@tiptap/extension-underline';
 import Highlight from '@tiptap/extension-highlight';
 import Placeholder from '@tiptap/extension-placeholder';
 import SlashCommand from './extensions/slash-command';
@@ -23,6 +22,7 @@ import { TableCell } from '@tiptap/extension-table-cell';
 import { TableHeader } from '@tiptap/extension-table-header';
 import 'katex/dist/katex.min.css';
 import { useNoteStore } from '../../stores/noteStore';
+import PluginRuntime from '../../plugins/runtime/PluginRuntime';
 
 // ─── Slash command items (grouped by category) ───
 function getSlashItems(query: string) {
@@ -295,6 +295,10 @@ function getSlashItems(query: string) {
       } },
   ];
 
+  // Merge plugin slash items
+  const pluginItems = PluginRuntime.getSlashItems(query);
+  all.push(...pluginItems);
+
   if (!query) return all;
   
   return all.filter(item =>
@@ -367,7 +371,6 @@ export default function NoteEditor({ initialContent, onChange }: { initialConten
       TableRow,
       TableHeader,
       TableCell,
-      Underline,
       Highlight.configure({ multicolor: false }),
       SlashCommand.configure({
         suggestion: {
@@ -380,22 +383,44 @@ export default function NoteEditor({ initialContent, onChange }: { initialConten
         suggestion: {
           items: ({ query }: { query: string }): MentionItem[] => {
             const q = query.toLowerCase();
-            return notes
-              .filter(n =>
-                !q ||
-                n.title.toLowerCase().includes(q) ||
-                (n.tags || []).some((t: string) => t.includes(q))
-              )
+            const allItems: any[] = [];
+            
+            for (const n of notes) {
+              const matchesPage = !q || n.title.toLowerCase().includes(q) || (n.tags || []).some((t: string) => t.includes(q));
+              if (matchesPage) {
+                allItems.push({
+                  id: n._id,
+                  label: n.title || 'Untitled',
+                  icon: n.icon || '📄',
+                  parentLabel: n.parentId ? notes.find(p => p._id === n.parentId)?.title : undefined,
+                  updatedAt: n.updatedAt,
+                });
+              }
+              
+              // Extract headings
+              if (n.content) {
+                const headingRegex = /<h[1-6][^>]*>(.*?)<\/h[1-6]>/gi;
+                let match;
+                while ((match = headingRegex.exec(n.content)) !== null) {
+                  const headingText = match[1].replace(/<[^>]+>/g, '').trim();
+                  if (headingText && (!q || headingText.toLowerCase().includes(q) || matchesPage)) {
+                    // Create an ID that includes the note ID and the hash fragment
+                    allItems.push({
+                      id: `${n._id}#${headingText}`,
+                      label: headingText,
+                      icon: '🔗',
+                      parentLabel: n.title || 'Untitled',
+                      updatedAt: n.updatedAt,
+                    });
+                  }
+                }
+              }
+            }
+            
+            return allItems
               .sort((a, b) => b.updatedAt - a.updatedAt)
-              .slice(0, 10)
-              .map(n => ({
-                id: n._id,
-                label: n.title || 'Untitled',
-                icon: n.icon || '📄',
-                parentLabel: n.parentId
-                  ? notes.find(p => p._id === n.parentId)?.title
-                  : undefined,
-              }));
+              .slice(0, 15)
+              .map(({ updatedAt, ...item }) => item as MentionItem);
           },
         },
       }),
@@ -407,7 +432,7 @@ export default function NoteEditor({ initialContent, onChange }: { initialConten
       }
     },
     editorProps: {
-      handleDrop: function(view, event, slice, moved) {
+      handleDrop: function(view, event, _slice, moved) {
         if (!moved && event.dataTransfer && event.dataTransfer.files && event.dataTransfer.files[0]) {
           const file = event.dataTransfer.files[0];
           if (file.type.startsWith('image/')) {
@@ -427,7 +452,7 @@ export default function NoteEditor({ initialContent, onChange }: { initialConten
         }
         return false;
       },
-      handlePaste: function(view, event, slice) {
+      handlePaste: function(view, event, _slice) {
         if (event.clipboardData && event.clipboardData.files && event.clipboardData.files[0]) {
           const file = event.clipboardData.files[0];
           if (file.type.startsWith('image/')) {

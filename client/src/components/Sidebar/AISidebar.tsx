@@ -88,7 +88,7 @@ function CompactProviderBar({
 
 export default function AISidebar({ setAiOpen }: { setAiOpen: (open: boolean) => void }) {
   const [activeTab, setActiveTab] = useState<'Suggest' | 'Chat' | 'Agent'>('Suggest');
-  const { getNote } = useNoteStore();
+  const { getNote, notes } = useNoteStore();
   const settings = useSettingsStore();
   const location = useLocation();
   const navigate = useNavigate();
@@ -297,32 +297,72 @@ export default function AISidebar({ setAiOpen }: { setAiOpen: (open: boolean) =>
                 <div className="mono kicker" style={{ fontSize: '10px', marginBottom: '12px' }}>Related Notes</div>
                 {loadingSuggestions ? (
                   <div style={{ color: 'var(--muted)', fontSize: '12px' }}>Analyzing connections…</div>
-                ) : suggestions.length === 0 ? (
-                  <div style={{ color: 'var(--muted)', fontSize: '12px', fontStyle: 'italic' }}>No related notes found yet.</div>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    {suggestions.map((s) => (
-                      <div key={s.note_id} onClick={() => navigate(`/notes/${s.note_id}`)}
-                        style={{ padding: '10px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '6px', cursor: 'pointer', transition: 'border-color 0.15s' }}
-                        onMouseEnter={e => (e.currentTarget.style.borderColor = 'var(--accent)')}
-                        onMouseLeave={e => (e.currentTarget.style.borderColor = 'var(--border)')}>
-                        <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--fg)', marginBottom: '4px' }}>📄 {s.title}</div>
-                        <div style={{ fontSize: '11px', color: 'var(--muted)', display: 'flex', justifyContent: 'space-between' }}>
-                          <span>Semantic match</span>
-                          <span style={{ color: 'var(--accent)' }}>{Math.round(s.score * 100)}%</span>
+                ) : (() => {
+                  const validSuggestions = suggestions.filter(s => s.note_id !== currentNoteId && notes.some(n => n._id === s.note_id));
+                  if (validSuggestions.length === 0) {
+                    return <div style={{ color: 'var(--muted)', fontSize: '12px', fontStyle: 'italic' }}>No related notes found yet.</div>;
+                  }
+                  return (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      {validSuggestions.map((s, idx) => (
+                        <div key={`${s.note_id}-${idx}`} onClick={() => navigate(`/notes/${s.note_id}`)}
+                          style={{ padding: '10px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '6px', cursor: 'pointer', transition: 'border-color 0.15s' }}
+                          onMouseEnter={e => (e.currentTarget.style.borderColor = 'var(--accent)')}
+                          onMouseLeave={e => (e.currentTarget.style.borderColor = 'var(--border)')}>
+                          <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--fg)', marginBottom: '4px' }}>📄 {s.title}</div>
+                          <div style={{ fontSize: '11px', color: 'var(--muted)', display: 'flex', justifyContent: 'space-between' }}>
+                            <span>Semantic match</span>
+                            <span style={{ color: 'var(--accent)' }}>{Math.round(s.score * 100)}%</span>
+                          </div>
                         </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                      ))}
+                    </div>
+                  );
+                })()}
                 <div className="mono kicker" style={{ fontSize: '10px', marginTop: '24px', marginBottom: '12px' }}>Suggested Links</div>
                 {suggestedLinks.length === 0 ? (
                   <div style={{ color: 'var(--muted)', fontSize: '12px', fontStyle: 'italic' }}>No new links suggested.</div>
                 ) : (
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                    {suggestedLinks.map((link) => (
-                      <div key={link} style={{ fontSize: '11px', padding: '4px 8px', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: '4px', color: 'var(--accent)', fontFamily: 'var(--font-mono)' }}>[[{link}]]</div>
-                    ))}
+                    {suggestedLinks.map((link) => {
+                      const [pageTitle, ...hashParts] = link.split('#');
+                      const hashText = hashParts.join('#');
+                      const existingNote = notes.find(n => n.title.toLowerCase() === pageTitle.toLowerCase());
+                      const linkId = link.replace(/[\s\W]+/g, '-');
+                      return (
+                        <button 
+                          key={link} 
+                          onClick={() => {
+                            if (existingNote) {
+                              navigate(`/notes/${existingNote._id}${hashText ? '#' + encodeURIComponent(hashText) : ''}`);
+                            } else {
+                              navigator.clipboard.writeText(`[[${link}]]`);
+                              const el = document.getElementById(`sugg-link-${linkId}`);
+                              if (el) {
+                                el.style.color = '#22c55e';
+                                el.innerText = 'Copied!';
+                                setTimeout(() => {
+                                  el.style.color = 'var(--accent)';
+                                  el.innerText = `[[${link}]]`;
+                                }, 1500);
+                              }
+                            }
+                          }}
+                          style={{ 
+                            fontSize: '11px', padding: '4px 8px', background: 'var(--bg)', 
+                            border: '1px solid var(--border)', borderRadius: '4px', 
+                            color: 'var(--accent)', fontFamily: 'var(--font-mono)',
+                            cursor: 'pointer', textAlign: 'left',
+                            transition: 'all 0.2s ease'
+                          }}
+                          onMouseEnter={e => e.currentTarget.style.background = 'var(--surface)'}
+                          onMouseLeave={e => e.currentTarget.style.background = 'var(--bg)'}
+                          title={existingNote ? "Open Note" : "Copy Link"}
+                        >
+                          <span id={`sugg-link-${linkId}`}>[[{link}]]</span>
+                        </button>
+                      );
+                    })}
                   </div>
                 )}
               </>

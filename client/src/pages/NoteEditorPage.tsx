@@ -5,6 +5,7 @@ import DatabaseView from '../components/Editor/DatabaseView';
 import type { Note } from '../stores/noteStore';
 import { useNoteStore } from '../stores/noteStore';
 import { ChevronDown, ChevronRight, Plus, Trash2, X } from 'lucide-react';
+import { NotePageActionsBar } from '../plugins/slots/NotePageActionsBar';
 
 const PAGE_ICONS = ['📄','📝','📓','📕','📗','📘','📙','📔','🗂️','📁','📋','🗒️','🏷️','💡','⭐','🔥','🚀','🎯','🧠','🔬','🔧','💻','🎨','📊','📈','🌐','🏗️','⚙️'];
 
@@ -51,6 +52,8 @@ export default function NoteEditorPage() {
           setParentId(note.parentId);
           setTags(note.tags || []);
           setProperties(note.properties || {});
+          
+          window.dispatchEvent(new CustomEvent('NOTEROOT_NOTE_OPENED', { detail: { noteId: id } }));
         }
         setIsLoaded(true);
       });
@@ -60,6 +63,31 @@ export default function NoteEditorPage() {
       setIsLoaded(true);
     }
   }, [id, getNote]);
+
+  // Scroll to heading if hash is present
+  useEffect(() => {
+    if (isLoaded && window.location.hash) {
+      const headingText = decodeURIComponent(window.location.hash.slice(1));
+      // Small delay to allow Tiptap to finish rendering DOM nodes
+      setTimeout(() => {
+        const editorEl = document.querySelector('.ProseMirror');
+        if (editorEl) {
+          const headings = Array.from(editorEl.querySelectorAll('h1, h2, h3, h4, h5, h6'));
+          const target = headings.find(h => h.textContent === headingText) as HTMLElement;
+          if (target) {
+            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            const originalBg = target.style.backgroundColor;
+            target.style.transition = 'background-color 0.5s ease';
+            target.style.backgroundColor = 'var(--surface)';
+            target.style.borderRadius = '4px';
+            setTimeout(() => {
+              target.style.backgroundColor = originalBg;
+            }, 2000);
+          }
+        }
+      }, 150);
+    }
+  }, [isLoaded, id]);
 
   useEffect(() => {
     if (addingTag && tagInputRef.current) tagInputRef.current.focus();
@@ -225,10 +253,13 @@ export default function NoteEditorPage() {
               </div>
             )}
           </div>
-          <input type="text" value={title} onChange={handleTitleChange}
-            style={{ fontFamily: 'var(--font-display)', fontSize: '42px', border: 'none', background: 'transparent', width: '100%', outline: 'none', color: 'var(--fg)', lineHeight: 1.1 }}
-            placeholder="Untitled"
-          />
+          <div style={{ width: '100%' }}>
+            <input type="text" value={title} onChange={handleTitleChange}
+              style={{ fontFamily: 'var(--font-display)', fontSize: '42px', border: 'none', background: 'transparent', width: '100%', outline: 'none', color: 'var(--fg)', lineHeight: 1.1 }}
+              placeholder="Untitled"
+            />
+            {id && id !== 'new' && <NotePageActionsBar noteId={id} />}
+          </div>
         </div>
 
         {/* ── Tags row ── */}

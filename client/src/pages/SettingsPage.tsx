@@ -1,7 +1,8 @@
 import { useSettingsStore } from '../stores/settingsStore';
 import { BUILTIN_PROVIDERS, BUILTIN_PROVIDER_IDS, type BuiltinProvider, type CustomProviderConfig } from '../lib/providerConfig';
-import { Eye, EyeOff, Check, Plus, Trash2, ExternalLink, ChevronDown, ChevronUp, Settings } from 'lucide-react';
+import { Eye, EyeOff, Check, Plus, Trash2, ChevronDown, ChevronUp, Settings, ExternalLink } from 'lucide-react';
 import { useState } from 'react';
+import { PluginSettingsPanels } from '../plugins/slots/PluginSettingsPanels';
 
 const STATUS_COLORS = { active: '#22c55e', configured: '#f59e0b', empty: '#6b7280' };
 
@@ -13,7 +14,7 @@ function ProviderCard({ providerId }: { providerId: BuiltinProvider }) {
     activeProvider, setActiveProvider,
     getProviderModel,
   } = useSettingsStore();
-  const key = providerKeys[providerId] ?? '';
+  const key = (providerKeys || {})[providerId] ?? '';
   const isActive = activeProvider === providerId;
   const isConfigured = key.trim().length > 0;
   const [show, setShow] = useState(false);
@@ -24,7 +25,7 @@ function ProviderCard({ providerId }: { providerId: BuiltinProvider }) {
   const selectedModel = getProviderModel(providerId);
 
   // Per-provider custom model list stored in Zustand
-  const extraModels: string[] = (providerModels[`${providerId}_extra`] as any) ?? [];
+  const extraModels: string[] = ((providerModels || {})[`${providerId}_extra`] as any) ?? [];
 
   const allModels = [...info.models, ...extraModels];
 
@@ -285,10 +286,20 @@ function AddCustomProviderForm({ onAdd }: { onAdd: () => void }) {
 
 export default function SettingsPage() {
   const { theme, setTheme, customProviders } = useSettingsStore();
+
   const [showAddCustom, setShowAddCustom] = useState(false);
+  
+  // Helper to show toasts if needed in the future, although plugin toast is gone
+  // const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+  //   setToast({ message, type });
+  //   setTimeout(() => setToast(null), 3000);
+  // };
+
+
 
   return (
-    <div style={{ padding: '32px', maxWidth: '720px', margin: '0 auto' }}>
+    <div style={{ padding: '32px', maxWidth: '720px', margin: '0 auto', position: 'relative' }}>
+
       <div className="mono kicker">Configuration</div>
       <h1 style={{ fontSize: '28px', fontWeight: 700, marginBottom: '32px', fontFamily: 'var(--font-display)', margin: '4px 0 32px' }}>Settings</h1>
 
@@ -313,6 +324,9 @@ export default function SettingsPage() {
           </div>
         </section>
 
+        {/* Plugin Extensions */}
+        <PluginSettingsPanels />
+
         {/* AI Providers */}
         <section style={{ padding: '24px', borderRadius: '12px', border: '1px solid var(--border)', background: 'var(--surface)' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
@@ -329,7 +343,7 @@ export default function SettingsPage() {
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             {BUILTIN_PROVIDER_IDS.map((id) => <ProviderCard key={id} providerId={id} />)}
-            {customProviders.map((p) => <CustomProviderCard key={p.id} provider={p} />)}
+            {(customProviders || []).map((p) => <CustomProviderCard key={p.id} provider={p} />)}
             {showAddCustom && <AddCustomProviderForm onAdd={() => setShowAddCustom(false)} />}
           </div>
         </section>

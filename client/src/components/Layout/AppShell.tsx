@@ -11,6 +11,7 @@ import VaultTree from './VaultTree';
 import AISidebar from '../Sidebar/AISidebar';
 import CommandPalette from '../CommandPalette/CommandPalette';
 import { useEffect, useState } from 'react';
+import { PluginTabBar } from '../../plugins/slots/PluginTabBar';
 
 export default function AppShell() {
   const { initDB, syncStatus, notes, saveNote, retrySync } = useNoteStore();
@@ -133,6 +134,11 @@ export default function AppShell() {
           </button>
         </div>
       </header>
+
+      {/* ── Plugin Tab Bar ── */}
+      <div style={{ gridColumn: '1 / -1', zIndex: 10 }}>
+        <PluginTabBar />
+      </div>
 
       {/* ── Left Sidebar ── */}
       <aside className="left-sidebar" style={{ display: 'flex', flexDirection: 'column', gap: 0, padding: '16px 12px', overflowY: 'auto' }}>

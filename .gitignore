@@ -40,6 +40,4 @@ Thumbs.db
 .idea/
 .vscode/
 *.swp
-design Specifications.md
-Sidebar design specification.md
-NoteRoot Design Prototype/
+summarizer-plugin/

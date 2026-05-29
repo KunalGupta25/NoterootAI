@@ -1,6 +1,7 @@
 import type { Editor } from '@tiptap/react';
 import { BubbleMenu } from '@tiptap/react/menus';
 import { useState } from 'react';
+import { PluginBubbleButtons } from '../../plugins/slots/PluginBubbleButtons';
 
 interface SelectionToolbarProps {
   editor: Editor;
@@ -126,6 +127,8 @@ export default function SelectionToolbar({ editor }: SelectionToolbarProps) {
                 L
               </button>
             )}
+            
+            <PluginBubbleButtons editor={editor} />
           </>
         )}
       </div>

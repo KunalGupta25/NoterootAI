@@ -101,7 +101,9 @@ export const getSettings = async (req: AuthRequest, res: Response) => {
 
     res.json({
       providerKeys: decryptedKeys,
-      customProviders: decryptedCustomProviders
+      customProviders: decryptedCustomProviders,
+      pluginSettings: user.pluginSettings || {},
+      installedCommunityPlugins: user.installedCommunityPlugins || []
     });
   } catch (error) {
     console.error('Failed to get settings', error);
@@ -133,6 +135,13 @@ export const updateSettings = async (req: AuthRequest, res: Response) => {
         };
       });
       user.customProviders = encryptedCustomProviders;
+    }
+
+    if (req.body.pluginSettings !== undefined) {
+      user.pluginSettings = req.body.pluginSettings;
+    }
+    if (req.body.installedCommunityPlugins !== undefined) {
+      user.installedCommunityPlugins = req.body.installedCommunityPlugins;
     }
 
     await user.save();

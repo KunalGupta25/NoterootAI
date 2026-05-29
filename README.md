@@ -11,8 +11,9 @@ NoteRootAI is a state-of-the-art, local-first, AI-powered Knowledge Management S
 4. [Data Flow Diagram (DFD)](#-data-flow-diagram-dfd)
 5. [User Flow](#-user-flow)
 6. [Features](#-features-added-so-far)
-7. [What Needs to be Added](#-what-needs-to-be-added)
-8. [How to Start & Use the Project](#-how-to-start--use-the-project)
+7. [Plugin Ecosystem](#-plugin-ecosystem)
+8. [What Needs to be Added](#-what-needs-to-be-added)
+9. [How to Start & Use the Project](#-how-to-start--use-the-project)
 
 ---
 
@@ -206,6 +207,66 @@ flowchart TD
 - **Smart Note Resolution:** Agent tools feature case-insensitive fallback logic, enabling it to look up notes by both exact ID or natural Language Title automatically.
 - **Secure Sandbox Bridge:** Plugin & Agent code is executed securely using an isolated Iframe Sandbox that safely bridges validated API calls back to the main thread `zustand` store.
 - **Smart Formatting:** Automatic interception and conversion of Agent Markdown outputs into complex TipTap HTML blocks for perfect rendering.
+
+---
+
+## 🧩 Plugin Ecosystem
+
+NoteRootAI features a first-class plugin system that allows the community to extend the editor, AI capabilities, and UI.
+
+### How Plugins Work
+
+Plugins are single JavaScript files hosted on public GitHub repositories. They are loaded and executed by the **Plugin Runtime** in a locked-down scope — no `window`, no `document`, no DOM access. Every interaction goes through a safe, typed `ctx` API.
+
+```javascript
+// Every plugin follows this structure
+function main(ctx) {
+  const { runtime, notes, ui, ai, theme, settings, events } = ctx;
+
+  // Register extensions into UI slots
+  runtime.registerExtension('note.pageActions', {
+    id: 'my-action',
+    icon: '⚡',
+    label: 'My Action',
+    onClick: async (noteId) => {
+      const note = await notes.getNote(noteId);
+      ui.showToast(`Note has ${note.title.length} chars in title!`);
+    }
+  });
+}
+```
+
+### Available Extension Points
+
+| Extension Point | Where It Appears |
+|---|---|
+| `settings.panels` | Settings → Plugins |
+| `note.pageActions` | Note editor top-right toolbar |
+| `editor.bubbleButtons` | Text selection bubble menu |
+| `editor.slashItems` | `/` command menu |
+| `layout.modals` | Modal dialogs |
+| `layout.overlays` | Always-visible overlays |
+| `theme.tokens` | App-wide CSS variable overrides |
+
+### Plugin Repository Examples
+
+| Plugin | Description |
+|---|---|
+| [`sample-plugin/`](./sample-plugin/) | Official reference plugin — demonstrates all extension points |
+| [`summarizer-plugin/`](./summarizer-plugin/) | Real-world plugin — summarizes selected text using `ctx.ai.chat()` |
+
+### 📚 Plugin Developer Guide
+
+See the **[`docs/`](./docs/)** folder for the complete multi-page developer guide:
+
+- [What Are Plugins?](./docs/01-what-are-plugins.md) — Architecture & security model
+- [Installation Guide](./docs/02-installation.md) — How to install from GitHub or locally
+- [Creating Your First Plugin](./docs/03-creating-your-first-plugin.md) — Step-by-step tutorial
+- [Extension Points Reference](./docs/04-extension-points.md) — All 7 extension points
+- [Plugin Context API](./docs/05-plugin-context-api.md) — Full `ctx` API reference
+- [Declarative UI System](./docs/06-declarative-ui.md) — All DescriptorNode types
+- [Publishing & Marketplace](./docs/07-publishing.md) — How to publish your plugin
+- [Examples & Recipes](./docs/08-examples.md) — Copy-paste patterns for common use cases
 
 ---
 

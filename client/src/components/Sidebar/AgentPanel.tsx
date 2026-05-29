@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Bot, Send, Trash2, Check, X, Loader2 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { useSettingsStore } from '../../stores/settingsStore';
-import { usePluginStore } from '../../stores/pluginStore';
+import { useNoteStore } from '../../stores/noteStore';
 
 import { AI_URL } from '../../lib/constants';
 import { isBuiltinProvider } from '../../lib/providerConfig';
@@ -66,7 +66,7 @@ function ToolApprovalCard({
 
 export default function AgentPanel() {
   const settings = useSettingsStore();
-  const { handlePluginApiRequest } = usePluginStore();
+  const noteStore = useNoteStore();
   const navigate = useNavigate();
 
 
@@ -210,27 +210,51 @@ export default function AgentPanel() {
     let resultPayload: any;
 
     try {
-      // Map Agent Tools to PluginAPI methods
       let toolRes: any;
       if (pendingTool.tool === 'create_note') {
-        toolRes = await handlePluginApiRequest('notes', 'createNote', [pendingTool.args.title, pendingTool.args.content]);
+        const { marked } = await import('marked');
+        const html = pendingTool.args.content ? await marked.parse(pendingTool.args.content) : '';
+        toolRes = await noteStore.saveNote({ title: pendingTool.args.title, content: html });
         if (toolRes) setTimeout(() => navigate(`/notes/${toolRes}`), 100);
       } else if (pendingTool.tool === 'append_to_note') {
-        toolRes = await handlePluginApiRequest('notes', 'appendContent', [pendingTool.args.note_id, pendingTool.args.content]);
+        const existing = await noteStore.getNote(pendingTool.args.note_id);
+        if (!existing) throw new Error('Note not found');
+        const { marked } = await import('marked');
+        const html = await marked.parse(pendingTool.args.content);
+        const newContent = existing.content ? `${existing.content}\n${html}` : html;
+        toolRes = await noteStore.saveNote({ ...existing, content: newContent });
       } else if (pendingTool.tool === 'update_note_title') {
-        toolRes = await handlePluginApiRequest('notes', 'updateNote', [pendingTool.args.note_id, { title: pendingTool.args.new_title }]);
+        const existing = await noteStore.getNote(pendingTool.args.note_id);
+        if (!existing) throw new Error('Note not found');
+        toolRes = await noteStore.saveNote({ ...existing, title: pendingTool.args.new_title });
       } else if (pendingTool.tool === 'create_sub_note') {
-        toolRes = await handlePluginApiRequest('notes', 'createSubNote', [pendingTool.args.parent_id, pendingTool.args.title, pendingTool.args.content]);
+        const parentNote = await noteStore.getNote(pendingTool.args.parent_id);
+        const actualParentId = parentNote ? parentNote._id : pendingTool.args.parent_id;
+        const { marked } = await import('marked');
+        const html = pendingTool.args.content ? await marked.parse(pendingTool.args.content) : '';
+        toolRes = await noteStore.saveNote({ parentId: actualParentId, title: pendingTool.args.title, content: html });
         if (toolRes) setTimeout(() => navigate(`/notes/${toolRes}`), 100);
       } else if (pendingTool.tool === 'replace_note_content') {
-        toolRes = await handlePluginApiRequest('notes', 'replaceContent', [pendingTool.args.note_id, pendingTool.args.content]);
+        const existing = await noteStore.getNote(pendingTool.args.note_id);
+        if (!existing) throw new Error('Note not found');
+        const { marked } = await import('marked');
+        const html = await marked.parse(pendingTool.args.content);
+        toolRes = await noteStore.saveNote({ ...existing, content: html });
       } else if (pendingTool.tool === 'delete_note') {
-        toolRes = await handlePluginApiRequest('notes', 'deleteNote', [pendingTool.args.note_id]);
+        await noteStore.deleteNote(pendingTool.args.note_id);
+        toolRes = true;
         setTimeout(() => navigate('/'), 100);
       } else if (pendingTool.tool === 'read_note') {
-        toolRes = await handlePluginApiRequest('notes', 'getNote', [pendingTool.args.note_id]);
+        toolRes = await noteStore.getNote(pendingTool.args.note_id);
       } else if (pendingTool.tool === 'list_all_notes') {
-        toolRes = await handlePluginApiRequest('notes', 'listAllNotes', []);
+        toolRes = noteStore.notes.map(n => ({
+          id: n._id,
+          title: n.title,
+          tags: n.tags,
+          parentId: n.parentId,
+          createdAt: n.createdAt,
+          updatedAt: n.updatedAt
+        }));
       } else {
         throw new Error(`Unsupported client tool: ${pendingTool.tool}`);
       }

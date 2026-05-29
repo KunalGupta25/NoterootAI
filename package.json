@@ -1,0 +1,16 @@
+{
+  "name": "noterootai",
+  "version": "1.0.0",
+  "description": "NoteRootAI root workspace for running services together",
+  "private": true,
+  "scripts": {
+    "dev:client": "cd client && npm run dev",
+    "dev:server": "cd server && npm run dev",
+    "dev:ai": "cd ai-service && .\\venv\\Scripts\\activate && uvicorn main:app --reload",
+    "dev": "concurrently -n \"CLIENT,SERVER,AI\" -c \"cyan,magenta,yellow\" \"npm run dev:client\" \"npm run dev:server\" \"npm run dev:ai\"",
+    "install:all": "npm install && cd client && npm install && cd ../server && npm install"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}

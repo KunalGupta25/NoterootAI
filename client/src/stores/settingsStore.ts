@@ -4,6 +4,7 @@ import type { BuiltinProvider, CustomProviderConfig } from '../lib/providerConfi
 import { BUILTIN_PROVIDERS } from '../lib/providerConfig';
 import { SYNC_URL } from '../lib/constants';
 import { useAuthStore } from './authStore';
+import { ThemeEngine } from '../plugins/runtime/ThemeEngine';
 
 export type { BuiltinProvider };
 export type { CustomProviderConfig };
@@ -42,6 +43,13 @@ interface SettingsState {
   removeCustomProvider: (id: string) => void;
   getCustomProvider: (id: string) => CustomProviderConfig | undefined;
 
+  // ── Plugin settings ───────────────────────────────────────────
+  pluginSettings: Record<string, Record<string, any>>;
+  setPluginSetting: (pluginId: string, key: string, value: any) => void;
+  getPluginSetting: (pluginId: string, key: string) => any;
+  installedCommunityPlugins: string[];
+  setInstalledCommunityPlugins: (urls: string[]) => void;
+
   // ── Helpers ───────────────────────────────────────────────────
   /** Returns the API key for whatever the active provider is */
   getActiveApiKey: () => string;
@@ -64,7 +72,10 @@ export const useSettingsStore = create<SettingsState>()(
     (set, get) => ({
       // ── Appearance ─────────────────────────────────────────────
       theme: 'dark',
-      setTheme: (theme) => set({ theme }),
+      setTheme: (theme) => {
+        set({ theme });
+        ThemeEngine.reapply();
+      },
 
       // ── Sidebar ────────────────────────────────────────────────
       isSidebarOpen: true,
@@ -131,6 +142,29 @@ export const useSettingsStore = create<SettingsState>()(
       getCustomProvider: (id) =>
         get().customProviders.find((c) => c.id === id),
 
+      // ── Plugin Settings ────────────────────────────────────────
+      pluginSettings: {},
+      setPluginSetting: (pluginId, key, value) => {
+        set((s) => ({
+          pluginSettings: {
+            ...s.pluginSettings,
+            [pluginId]: {
+              ...(s.pluginSettings[pluginId] || {}),
+              [key]: value
+            }
+          }
+        }));
+        get().saveSettings();
+      },
+      getPluginSetting: (pluginId, key) => {
+        return (get().pluginSettings[pluginId] || {})[key];
+      },
+      installedCommunityPlugins: [],
+      setInstalledCommunityPlugins: (urls) => {
+        set({ installedCommunityPlugins: urls });
+        get().saveSettings();
+      },
+
       // ── Helpers ────────────────────────────────────────────────
       getActiveApiKey: () => {
         const state = get();
@@ -171,33 +205,56 @@ export const useSettingsStore = create<SettingsState>()(
           if (res.ok) {
             const data = await res.json();
             set((s) => {
-              const newKeys = { ...s.providerKeys, ...(data.providerKeys || {}) };
-              const newCustoms = data.customProviders || s.customProviders;
-              
+              // Smart merge: server value wins only when it is non-empty.
+              // This prevents a cold/fresh server DB from clearing locally-cached keys.
+              const serverKeys: Record<string, string> = data.providerKeys || {};
+              const mergedKeys = { ...s.providerKeys };
+              for (const [provider, key] of Object.entries(serverKeys)) {
+                if (key && String(key).trim()) {
+                  mergedKeys[provider as BuiltinProvider] = key as string;
+                }
+              }
+
+              // For custom providers: merge by id, prefer server when it has a key
+              const localCustomsMap = new Map(s.customProviders.map(c => [c.id, c]));
+              const serverCustoms: any[] = data.customProviders || [];
+              serverCustoms.forEach(sc => {
+                const local = localCustomsMap.get(sc.id);
+                if (!local || (sc.apiKey && sc.apiKey.trim())) {
+                  localCustomsMap.set(sc.id, sc);
+                }
+              });
+              const mergedCustoms = Array.from(localCustomsMap.values());
+
               // Auto-select a configured provider if the active one isn't configured
               let newActive = s.activeProvider;
-              const isActiveConfigured = (newActive in BUILTIN_PROVIDERS) 
-                ? !!newKeys[newActive as BuiltinProvider]
-                : !!newCustoms.find((c: any) => c.id === newActive)?.apiKey;
-                
+              const isActiveConfigured = (newActive in BUILTIN_PROVIDERS)
+                ? !!mergedKeys[newActive as BuiltinProvider]
+                : !!mergedCustoms.find((c: any) => c.id === newActive)?.apiKey;
+
               if (!isActiveConfigured) {
-                const firstConfiguredBuiltin = (Object.keys(BUILTIN_PROVIDERS) as BuiltinProvider[]).find(p => !!newKeys[p]);
+                const firstConfiguredBuiltin = (Object.keys(BUILTIN_PROVIDERS) as BuiltinProvider[]).find(p => !!mergedKeys[p]);
                 if (firstConfiguredBuiltin) {
                   newActive = firstConfiguredBuiltin;
-                } else if (newCustoms.length > 0) {
-                  newActive = newCustoms[0].id;
+                } else if (mergedCustoms.length > 0) {
+                  newActive = mergedCustoms[0].id;
                 }
               }
 
               return {
-                providerKeys: newKeys,
-                customProviders: newCustoms,
-                activeProvider: newActive
+                providerKeys: mergedKeys,
+                customProviders: mergedCustoms,
+                activeProvider: newActive,
+                pluginSettings: { ...s.pluginSettings, ...(data.pluginSettings || {}) },
+                installedCommunityPlugins: data.installedCommunityPlugins?.length
+                  ? data.installedCommunityPlugins
+                  : s.installedCommunityPlugins,
               };
             });
           }
         } catch (e) {
-          console.error('Failed to sync settings from server', e);
+          // Server offline is expected — local keys are still available from localStorage
+          console.warn('Could not sync settings from server (offline?):', (e as Error).message);
         }
       },
       saveSettings: async () => {
@@ -213,7 +270,9 @@ export const useSettingsStore = create<SettingsState>()(
             },
             body: JSON.stringify({
               providerKeys: state.providerKeys,
-              customProviders: state.customProviders
+              customProviders: state.customProviders,
+              pluginSettings: state.pluginSettings,
+              installedCommunityPlugins: state.installedCommunityPlugins
             })
           });
         } catch (e) {
@@ -222,12 +281,28 @@ export const useSettingsStore = create<SettingsState>()(
       },
     }),
     {
-      name: 'noteroot-settings-v2',
-      partialize: (state) => Object.fromEntries(
-        Object.entries(state).filter(([key]) => !['providerKeys', 'customProviders'].includes(key))
-      ),
-      // Migrate from old v1 format if present
+      name: 'noteroot-settings-v3',
+      // Persist everything including providerKeys and customProviders locally.
+      // Keys are also encrypted on the server; local copy is the offline fallback.
+      partialize: (state) => {
+        // Exclude non-serialisable functions and derived getters
+        const excluded = new Set([
+          'setTheme', 'toggleSidebar', 'toggleAISidebar',
+          'setProviderKey', 'getProviderKey',
+          'setActiveProvider',
+          'setProviderModel', 'getProviderModel',
+          'addCustomProvider', 'updateCustomProvider', 'removeCustomProvider', 'getCustomProvider',
+          'setPluginSetting', 'getPluginSetting', 'setInstalledCommunityPlugins',
+          'getActiveApiKey', 'isActiveProviderConfigured', 'getConfiguredProviders',
+          'syncSettings', 'saveSettings',
+          'aiProvider', 'aiApiKey',
+        ]);
+        return Object.fromEntries(
+          Object.entries(state).filter(([key]) => !excluded.has(key))
+        );
+      },
       migrate: (persisted: any, version: number) => {
+        // v0 → v1: flat aiProvider / aiApiKey
         if (version === 0 && persisted?.aiProvider && persisted?.aiApiKey) {
           const provider = persisted.aiProvider as BuiltinProvider;
           return {
@@ -236,9 +311,11 @@ export const useSettingsStore = create<SettingsState>()(
             providerKeys: { [provider]: persisted.aiApiKey },
           };
         }
+        // v1 → v2 (noteroot-settings-v2): providerKeys were missing, nothing to do
+        // v2 → v3 (noteroot-settings-v3): providerKeys now included, keep as-is
         return persisted;
       },
-      version: 1,
+      version: 3,
     }
   )
 );

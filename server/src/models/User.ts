@@ -7,6 +7,8 @@ export interface IUser extends Document {
   passwordHash: string;
   providerKeys: Map<string, string>;
   customProviders: any[];
+  pluginSettings: Map<string, any>;
+  installedCommunityPlugins: string[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -19,6 +21,8 @@ const UserSchema: Schema = new Schema(
     passwordHash: { type: String, required: true },
     providerKeys: { type: Map, of: String, default: {} },
     customProviders: { type: Array, default: [] },
+    pluginSettings: { type: Map, default: {} },
+    installedCommunityPlugins: { type: [String], default: [] },
   },
   { timestamps: true }
 );

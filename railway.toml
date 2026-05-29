@@ -1,9 +1,9 @@
 [build]
-buildCommand = "cd server && rm -rf dist && npm install && npm run build"
+buildCommand = "cd server && npm install --include=dev && rm -rf dist && npx tsc"
 
 [deploy]
-startCommand = "cd server && npm start"
+startCommand = "cd server && node dist/app.js"
 healthcheckPath = "/api/health"
-healthcheckTimeout = 30
+healthcheckTimeout = 60
 restartPolicyType = "on_failure"
-restartPolicyMaxRetries = 10
+restartPolicyMaxRetries = 5

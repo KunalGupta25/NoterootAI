@@ -104,10 +104,10 @@ class PluginRuntimeManager {
   /**
    * React slots call this to get all descriptors for a point.
    */
-  public getExtensions(point: ExtensionPoint) {
-    const all = [];
+  public getExtensions<T = any>(point: ExtensionPoint): T[] {
+    const all: T[] = [];
     if (this.extensions.has(point)) {
-      for (const [pluginId, descriptors] of this.extensions.get(point)!.entries()) {
+      for (const [_pluginId, descriptors] of this.extensions.get(point)!.entries()) {
         if (Array.isArray(descriptors)) {
           all.push(...descriptors);
         } else {

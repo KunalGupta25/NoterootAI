@@ -9,3 +9,4 @@ mistralai
 chromadb
 beautifulsoup4
 python-dotenv
+langchain-text-splitters

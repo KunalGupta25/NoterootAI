@@ -94,7 +94,10 @@ export const useSettingsStore = create<SettingsState>()(
 
       // ── Active provider ────────────────────────────────────────
       activeProvider: 'gemini',
-      setActiveProvider: (provider) => set({ activeProvider: provider }),
+      setActiveProvider: (provider) => {
+        set({ activeProvider: provider });
+        get().saveSettings();
+      },
 
       // ── Model selection ────────────────────────────────────────
       providerModels: {
@@ -227,8 +230,8 @@ export const useSettingsStore = create<SettingsState>()(
               });
               const mergedCustoms = Array.from(localCustomsMap.values());
 
-              // Keep the active provider exactly as the user set it locally
-              let newActive = s.activeProvider;
+              // Use server's active provider if available, otherwise local
+              let newActive = data.activeProvider || s.activeProvider;
 
               return {
                 theme: data.theme || s.theme,
@@ -260,6 +263,7 @@ export const useSettingsStore = create<SettingsState>()(
             },
             body: JSON.stringify({
               theme: state.theme,
+              activeProvider: state.activeProvider,
               providerKeys: state.providerKeys,
               customProviders: state.customProviders,
               pluginSettings: state.pluginSettings,

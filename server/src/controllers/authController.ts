@@ -101,6 +101,7 @@ export const getSettings = async (req: AuthRequest, res: Response) => {
 
     res.json({
       theme: user.theme || 'dark',
+      activeProvider: user.activeProvider || 'gemini',
       providerKeys: decryptedKeys,
       customProviders: decryptedCustomProviders,
       pluginSettings: user.pluginSettings || {},
@@ -146,6 +147,9 @@ export const updateSettings = async (req: AuthRequest, res: Response) => {
     }
     if (req.body.theme !== undefined) {
       user.theme = req.body.theme;
+    }
+    if (req.body.activeProvider !== undefined) {
+      user.activeProvider = req.body.activeProvider;
     }
 
     await user.save();

@@ -1,7 +1,7 @@
 # 🌿 NoteRootAI
 
 NoteRootAI is a state-of-the-art, local-first, AI-powered Knowledge Management System (KMS) inspired by Notion and Obsidian. It is designed to act as your second brain, offering a rich markdown editor, interactive knowledge graph visualization, offline-first capabilities with cloud synchronization, and a deeply integrated AI assistant capable of contextual Retrieval-Augmented Generation (RAG) and autonomous agentic workflows.
-
+https://github.com/KunalGupta25/NoterootAI/tree/main
 ---
 
 ## 📖 Table of Contents
@@ -338,3 +338,4 @@ We are currently preparing to build **Phase 4 (Community Ecosystem)**.
 4. Go to Settings > AI Providers, enter your preferred API key (e.g., Gemini or Groq) or setup a Custom Ollama endpoint.
 5. Open the right sidebar to start chatting with your Agent to automatically build, retrieve, or organize your knowledge base!
 Singh Suhani
+Shubhra Gohil

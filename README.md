@@ -337,5 +337,5 @@ We are currently preparing to build **Phase 4 (Community Ecosystem)**.
 3. Click "New Note", give it a title, and use `/` to see all formatting options. You can also paste or drop images instantly.
 4. Go to Settings > AI Providers, enter your preferred API key (e.g., Gemini or Groq) or setup a Custom Ollama endpoint.
 5. Open the right sidebar to start chatting with your Agent to automatically build, retrieve, or organize your knowledge base!
-Singh Suhani
+Suhani Singh
 Shubhra Gohil

@@ -7,6 +7,16 @@ import { Server } from 'socket.io';
 // Load environment variables
 dotenv.config();
 
+// ── Global crash guards ─────────────────────────────────────────────
+// Prevent the process from dying on unhandled errors (Railway marks it
+// as crashed and eventually stops restarting after maxRetries).
+process.on('uncaughtException', (err) => {
+  console.error('[FATAL] Uncaught exception — keeping process alive', err);
+});
+process.on('unhandledRejection', (reason) => {
+  console.error('[FATAL] Unhandled promise rejection — keeping process alive', reason);
+});
+
 const app = express();
 const httpServer = createServer(app);
 
@@ -33,7 +43,7 @@ import pluginsRouter from './routes/plugins';
 // Middleware — manual CORS headers (Express 5 compatible)
 app.use((req, res, next) => {
   const origin = req.headers.origin;
-  if (origin) {
+  if (origin && ALLOWED_ORIGINS.includes(origin)) {
     res.setHeader('Access-Control-Allow-Origin', origin);
   }
   res.setHeader('Access-Control-Allow-Credentials', 'true');
@@ -57,6 +67,15 @@ app.use('/api/plugins', pluginsRouter);
 // Basic Route
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', message: 'NoteRoot API is running' });
+});
+
+// Global error handler — catches any unhandled errors in route handlers
+// and prevents Express from crashing the process.
+app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  console.error('[Express] Unhandled route error:', err);
+  if (!res.headersSent) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 // Socket.io for Real-time
@@ -89,6 +108,14 @@ if (MONGODB_URI) {
     .catch((error) => {
       console.error('MongoDB connection error:', error);
     });
+
+  // Auto-reconnect on disconnect
+  mongoose.connection.on('disconnected', () => {
+    console.warn('[MongoDB] Disconnected — will auto-reconnect');
+  });
+  mongoose.connection.on('error', (err) => {
+    console.error('[MongoDB] Connection error:', err);
+  });
 } else {
   console.log('No MONGODB_URI provided. Running without DB connection.');
 }

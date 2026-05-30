@@ -19,16 +19,12 @@ app = FastAPI(title="NoteRootAI Service", version="1.0.0")
 
 import os
 
-# Allow frontend domains
+# Allow all origins — API keys are client-provided, not server secrets.
+# Restricting origins only breaks Vercel preview URLs and custom domains.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        os.getenv("CLIENT_URL", "https://noteroot-ai.vercel.app"),
-        "https://noteroot-ai.vercel.app",
-        "http://localhost:5173",
-        "http://localhost:3000",
-    ],
-    allow_credentials=True,
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -92,11 +88,13 @@ async def suggest_endpoint(request: SuggestRequest):
 @app.post("/chat")
 async def chat_endpoint(request: ChatRequest):
     """Streaming RAG chat."""
-    try:
-        generator = chat_rag(request)
-        return StreamingResponse(generator, media_type="text/event-stream")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    async def safe_stream():
+        try:
+            async for chunk in chat_rag(request):
+                yield chunk
+        except Exception as e:
+            yield f"\n\n[Error: {str(e)}]"
+    return StreamingResponse(safe_stream(), media_type="text/event-stream")
 
 from services.agent import run_agent
 from models import AgentRequest
@@ -104,11 +102,14 @@ from models import AgentRequest
 @app.post("/agent")
 async def agent_endpoint(request: AgentRequest):
     """Streaming Agent chat with tool calling."""
-    try:
-        generator = run_agent(request)
-        return StreamingResponse(generator, media_type="text/event-stream")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    async def safe_stream():
+        try:
+            async for chunk in run_agent(request):
+                yield chunk
+        except Exception as e:
+            import json
+            yield f"data: {json.dumps({'type': 'error', 'content': str(e)})}\n\n"
+    return StreamingResponse(safe_stream(), media_type="text/event-stream")
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

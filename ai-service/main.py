@@ -17,10 +17,17 @@ from providers.factory import get_provider
 
 app = FastAPI(title="NoteRootAI Service", version="1.0.0")
 
-# Allow all origins for dev
+import os
+
+# Allow frontend domains
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        os.getenv("CLIENT_URL", "https://noteroot-ai.vercel.app"),
+        "https://noteroot-ai.vercel.app",
+        "http://localhost:5173",
+        "http://localhost:3000",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

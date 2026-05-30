@@ -222,7 +222,7 @@ export default function AIChatPage() {
       chatStore.addMessage(chatId, { role: 'assistant', content: fullContent, timestamp: Date.now() });
     } catch (err) {
       console.error(err);
-      setMessages((prev) => [...prev, { role: 'assistant', content: '⚠ Could not reach AI service. Check your API key and connection.' }]);
+      setMessages((prev) => [...prev, { role: 'assistant', content: `⚠ AI service error: ${err instanceof Error ? err.message : String(err)}` }]);
     } finally {
       setLoading(false);
     }

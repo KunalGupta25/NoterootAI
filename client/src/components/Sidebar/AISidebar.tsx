@@ -237,7 +237,7 @@ export default function AISidebar({ setAiOpen }: { setAiOpen: (open: boolean) =>
       }
     } catch (err) {
       console.error('Chat error:', err);
-      setMessages((prev) => [...prev, { role: 'assistant', content: '⚠ Could not reach AI service. Check your API key.' }]);
+      setMessages((prev) => [...prev, { role: 'assistant', content: `⚠ AI service error: ${err instanceof Error ? err.message : String(err)}` }]);
     } finally {
       setChatLoading(false);
     }

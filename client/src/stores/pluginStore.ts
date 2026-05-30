@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import localforage from 'localforage';
 import PluginRuntime from '../plugins/runtime/PluginRuntime';
+import { useSettingsStore } from './settingsStore';
 
 export interface InstalledPlugin {
   id: string;
@@ -16,6 +17,7 @@ interface PluginStore {
   isLoaded: boolean;
   initPlugins: () => Promise<void>;
   installPlugin: (plugin: InstalledPlugin) => Promise<void>;
+  installFromUrl: (url: string) => Promise<void>;
   togglePlugin: (id: string, enabled: boolean) => Promise<void>;
   removePlugin: (id: string) => Promise<void>;
 }
@@ -51,9 +53,46 @@ export const usePluginStore = create<PluginStore>((set, get) => ({
     const newPlugins = [...get().plugins.filter(p => p.id !== plugin.id), plugin];
     set({ plugins: newPlugins });
     await localforage.setItem('installed_plugins', newPlugins);
+    
+    // Sync URLs
+    if (plugin.url) {
+      const urls = newPlugins.filter(p => p.source === 'community' && p.url).map(p => p.url!);
+      useSettingsStore.getState().setInstalledCommunityPlugins(urls);
+    }
+
     if (plugin.enabled) {
       // Execute newly installed
       await PluginRuntime.executePlugin(plugin);
+    }
+  },
+
+  installFromUrl: async (url: string) => {
+    try {
+      let owner = ''; let repo = ''; let branch = 'main';
+      if (url.includes('github.com')) {
+        const parts = url.replace('https://github.com/', '').split('/');
+        owner = parts[0]; repo = parts[1];
+      } else return;
+      
+      const readmeRes = await fetch(`https://raw.githubusercontent.com/${owner}/${repo}/${branch}/README.md`);
+      const codeRes = await fetch(`https://raw.githubusercontent.com/${owner}/${repo}/${branch}/plugin.js`);
+      if (!readmeRes.ok || !codeRes.ok) return;
+      
+      const readmeText = await readmeRes.text();
+      const codeText = await codeRes.text();
+      
+      let name = repo;
+      const match = readmeText.match(/^---\n([\s\S]+?)\n---/);
+      if (match) {
+        match[1].split('\n').forEach(line => {
+          const [key, ...rest] = line.split(':');
+          if (key.trim() === 'name') name = rest.join(':').trim().replace(/^['"]|['"]$/g, '');
+        });
+      }
+      const id = `plugin-${name.replace(/\s+/g, '-').toLowerCase()}`;
+      await get().installPlugin({ id, source: 'community', enabled: true, code: codeText, url, readme: readmeText });
+    } catch (e) {
+      console.error('Failed to sync plugin', url, e);
     }
   },
 
@@ -87,5 +126,9 @@ export const usePluginStore = create<PluginStore>((set, get) => ({
     set({ plugins: newPlugins });
     await localforage.setItem('installed_plugins', newPlugins);
     PluginRuntime.disablePlugin(id);
+
+    // Sync URLs
+    const urls = newPlugins.filter(p => p.source === 'community' && p.url).map(p => p.url!);
+    useSettingsStore.getState().setInstalledCommunityPlugins(urls);
   }
 }));

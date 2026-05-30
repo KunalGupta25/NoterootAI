@@ -308,7 +308,7 @@ export default function AIChatPage() {
               )}
             </div>
           </div>
-          <ProviderModelBar provider={activeProvider} model={activeModel} onProviderChange={(p) => { setActiveProvider(p); setActiveModel(useSettingsStore.getState().getProviderModel(p)); }} onModelChange={setActiveModel} />
+          <ProviderModelBar provider={activeProvider} model={activeModel} onProviderChange={(p) => { setActiveProvider(p); useSettingsStore.getState().setActiveProvider(p); setActiveModel(useSettingsStore.getState().getProviderModel(p)); }} onModelChange={(m) => { setActiveModel(m); useSettingsStore.getState().setProviderModel(activeProvider, m); }} />
         </div>
 
         {/* Messages */}

@@ -75,6 +75,7 @@ export const useSettingsStore = create<SettingsState>()(
       setTheme: (theme) => {
         set({ theme });
         ThemeEngine.reapply();
+        get().saveSettings();
       },
 
       // ── Sidebar ────────────────────────────────────────────────
@@ -226,22 +227,11 @@ export const useSettingsStore = create<SettingsState>()(
               });
               const mergedCustoms = Array.from(localCustomsMap.values());
 
-              // Auto-select a configured provider if the active one isn't configured
+              // Keep the active provider exactly as the user set it locally
               let newActive = s.activeProvider;
-              const isActiveConfigured = (newActive in BUILTIN_PROVIDERS)
-                ? !!mergedKeys[newActive as BuiltinProvider]
-                : !!mergedCustoms.find((c: any) => c.id === newActive)?.apiKey;
-
-              if (!isActiveConfigured) {
-                const firstConfiguredBuiltin = (Object.keys(BUILTIN_PROVIDERS) as BuiltinProvider[]).find(p => !!mergedKeys[p]);
-                if (firstConfiguredBuiltin) {
-                  newActive = firstConfiguredBuiltin;
-                } else if (mergedCustoms.length > 0) {
-                  newActive = mergedCustoms[0].id;
-                }
-              }
 
               return {
+                theme: data.theme || s.theme,
                 providerKeys: mergedKeys,
                 customProviders: mergedCustoms,
                 activeProvider: newActive,
@@ -269,6 +259,7 @@ export const useSettingsStore = create<SettingsState>()(
               Authorization: `Bearer ${token}`
             },
             body: JSON.stringify({
+              theme: state.theme,
               providerKeys: state.providerKeys,
               customProviders: state.customProviders,
               pluginSettings: state.pluginSettings,

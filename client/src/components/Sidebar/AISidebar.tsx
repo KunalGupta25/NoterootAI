@@ -273,8 +273,8 @@ export default function AISidebar({ setAiOpen }: { setAiOpen: (open: boolean) =>
       {activeTab === 'Chat' && isConfigured && (
         <CompactProviderBar
           provider={chatProvider} model={chatModel}
-          onProviderChange={(p) => { setChatProvider(p); setChatModel(useSettingsStore.getState().getProviderModel(p)); }}
-          onModelChange={setChatModel}
+          onProviderChange={(p) => { setChatProvider(p); useSettingsStore.getState().setActiveProvider(p); setChatModel(useSettingsStore.getState().getProviderModel(p)); }}
+          onModelChange={(m) => { setChatModel(m); useSettingsStore.getState().setProviderModel(chatProvider, m); }}
         />
       )}
 

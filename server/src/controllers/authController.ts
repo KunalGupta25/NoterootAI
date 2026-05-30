@@ -100,6 +100,7 @@ export const getSettings = async (req: AuthRequest, res: Response) => {
     });
 
     res.json({
+      theme: user.theme || 'dark',
       providerKeys: decryptedKeys,
       customProviders: decryptedCustomProviders,
       pluginSettings: user.pluginSettings || {},
@@ -142,6 +143,9 @@ export const updateSettings = async (req: AuthRequest, res: Response) => {
     }
     if (req.body.installedCommunityPlugins !== undefined) {
       user.installedCommunityPlugins = req.body.installedCommunityPlugins;
+    }
+    if (req.body.theme !== undefined) {
+      user.theme = req.body.theme;
     }
 
     await user.save();

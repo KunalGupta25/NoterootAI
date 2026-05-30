@@ -72,6 +72,19 @@ function App() {
     }
   }, [isLoaded, plugins]);
 
+  // Auto-install missing synced plugins from other devices
+  useEffect(() => {
+    if (isLoaded && token) {
+      const syncedUrls = useSettingsStore.getState().installedCommunityPlugins || [];
+      const localUrls = plugins.map(p => p.url).filter(Boolean) as string[];
+      const missingUrls = syncedUrls.filter(url => !localUrls.includes(url));
+      
+      for (const url of missingUrls) {
+        usePluginStore.getState().installFromUrl(url);
+      }
+    }
+  }, [isLoaded, token, plugins.length]);
+
   return (
     <BrowserRouter>
       <Routes>

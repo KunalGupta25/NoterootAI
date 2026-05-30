@@ -9,6 +9,7 @@ export interface IUser extends Document {
   customProviders: any[];
   pluginSettings: Map<string, any>;
   installedCommunityPlugins: string[];
+  theme: 'light' | 'dark';
   createdAt: Date;
   updatedAt: Date;
 }
@@ -23,6 +24,7 @@ const UserSchema: Schema = new Schema(
     customProviders: { type: Array, default: [] },
     pluginSettings: { type: Map, default: {} },
     installedCommunityPlugins: { type: [String], default: [] },
+    theme: { type: String, enum: ['light', 'dark'], default: 'dark' },
   },
   { timestamps: true }
 );

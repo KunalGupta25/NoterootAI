@@ -19,6 +19,32 @@ export default function GraphPage() {
     const elements: cytoscape.ElementDefinition[] = [];
     const edgesAdded = new Set<string>();
 
+    // Add central NoteRoot node
+    elements.push({
+      data: {
+        id: '__noteroot_center__',
+        label: 'NoteRoot',
+        icon: '🌌',
+        type: 'center',
+        linkCount: 0,
+      }
+    });
+
+    const depths = new Map<string, number>();
+    const getDepth = (noteId: string, visited = new Set<string>()): number => {
+      if (depths.has(noteId)) return depths.get(noteId)!;
+      if (visited.has(noteId)) return 1;
+      visited.add(noteId);
+      const note = notes.find(n => n._id === noteId);
+      if (!note || !note.parentId) {
+        depths.set(noteId, 1);
+        return 1;
+      }
+      const d = 1 + getDepth(note.parentId, visited);
+      depths.set(noteId, d);
+      return d;
+    };
+
     notes.forEach(note => {
       // Count wiki-links this note has
       const wikiLinks = (note.content.match(/\[\[([^\]]+)\]\]/g) || []).length;
@@ -28,12 +54,22 @@ export default function GraphPage() {
           label: note.title || 'Untitled',
           icon: note.icon || '📄',
           type: note.parentId ? 'child' : 'root',
+          depth: getDepth(note._id),
           linkCount: wikiLinks,
         },
       });
     });
 
     notes.forEach(note => {
+      // Link root pages to the central NoteRoot node
+      if (!note.parentId) {
+        const eid = `c___noteroot_center__${note._id}`;
+        if (!edgesAdded.has(eid)) {
+          edgesAdded.add(eid);
+          elements.push({ data: { id: eid, source: '__noteroot_center__', target: note._id, edgeType: 'center_link' } });
+        }
+      }
+
       // Parent → child hierarchy edges (dashed)
       if (note.parentId && notes.find(n => n._id === note.parentId)) {
         const eid = `h_${note.parentId}_${note._id}`;
@@ -99,27 +135,61 @@ export default function GraphPage() {
             'text-background-opacity': 0,
           } as any,
         },
-        // ── Root page: slightly larger, brighter ──
+        // ── Root page: slightly larger, brighter (Depth 1) ──
         {
           selector: 'node[type = "root"]',
           style: {
-            'background-color': '#e2e8f4',
-            'width': 16,
-            'height': 16,
+            'background-color': '#60a5fa', // Blue
+            'width': 18,
+            'height': 18,
             'font-size': '11px',
             'font-weight': 600,
-            'color': '#dde3f0',
+            'color': '#bfdbfe',
           } as any,
         },
-        // ── Child / sub-page: smaller, dimmer ──
+        // ── Center node: NoteRoot ──
         {
-          selector: 'node[type = "child"]',
+          selector: 'node[type = "center"]',
           style: {
-            'background-color': '#8892a4',
-            'width': 8,
-            'height': 8,
+            'background-color': '#eab308', // Yellow
+            'width': 26,
+            'height': 26,
+            'font-size': '15px',
+            'font-weight': 700,
+            'color': '#fef08a',
+            'border-width': 3,
+            'border-color': '#fde047',
+          } as any,
+        },
+        // ── Center link edges ──
+        {
+          selector: 'edge[edgeType = "center_link"]',
+          style: {
+            'width': 1.5,
+            'line-color': '#475569',
+            'curve-style': 'bezier',
+          } as any,
+        },
+        // ── Child / sub-page (Depth 2) ──
+        {
+          selector: 'node[type = "child"][depth = 2]',
+          style: {
+            'background-color': '#34d399', // Emerald
+            'width': 12,
+            'height': 12,
             'font-size': '10px',
-            'color': '#9aa3b4',
+            'color': '#a7f3d0',
+          } as any,
+        },
+        // ── Child / sub-page (Depth >= 3) ──
+        {
+          selector: 'node[type = "child"][depth >= 3]',
+          style: {
+            'background-color': '#c084fc', // Purple
+            'width': 9,
+            'height': 9,
+            'font-size': '9px',
+            'color': '#e9d5ff',
           } as any,
         },
         // ── Selected node: accent glow ──
@@ -186,14 +256,18 @@ export default function GraphPage() {
       ],
       layout: {
         name: 'cose',
-        padding: 80,
-        nodeRepulsion: () => 6000,
-        idealEdgeLength: () => 80,
-        edgeElasticity: () => 50,
-        gravity: 0.3,
+        padding: 40,
+        nodeRepulsion: () => 60000,
+        idealEdgeLength: () => 60,
+        edgeElasticity: () => 100,
+        nestingFactor: 5,
+        gravity: 0.25,
+        numIter: 1200,
+        initialTemp: 250,
+        coolingFactor: 0.96,
+        minTemp: 1.0,
         animate: true,
-        animationDuration: 500,
-        randomize: false,
+        animationDuration: 600,
         fit: true,
       } as any,
       minZoom: 0.2,
@@ -203,6 +277,41 @@ export default function GraphPage() {
     setStats({
       nodes: cyRef.current.nodes().length,
       edges: cyRef.current.edges().length,
+    });
+
+    // Pull children when dragging a parent
+    let dragPos = { x: 0, y: 0 };
+    
+    cyRef.current.on('grab', 'node', (evt) => {
+      dragPos = { ...evt.target.position() };
+    });
+
+    cyRef.current.on('drag', 'node', (evt) => {
+      if (!cyRef.current) return;
+      const node = evt.target;
+      const pos = node.position();
+      const dx = pos.x - dragPos.x;
+      const dy = pos.y - dragPos.y;
+      dragPos = { ...pos };
+
+      // Recursively find all descendants through hierarchy or center links
+      const getDescendants = (n: cytoscape.NodeSingular, set = new Set<cytoscape.NodeSingular>()) => {
+        n.outgoers('edge[edgeType="hierarchy"], edge[edgeType="center_link"]').targets().forEach(child => {
+          if (!set.has(child)) {
+            set.add(child);
+            getDescendants(child, set);
+          }
+        });
+        return set;
+      };
+
+      const descendants = getDescendants(node);
+      descendants.forEach(child => {
+        if (!child.grabbed()) {
+          const p = child.position();
+          child.position({ x: p.x + dx, y: p.y + dy });
+        }
+      });
     });
 
     // Hover highlight neighbours
@@ -224,7 +333,7 @@ export default function GraphPage() {
       if (!cyRef.current) return;
       const node = evt.target;
       const nid = node.id();
-      if (nid === '__empty__') return;
+      if (nid === '__empty__' || nid === '__noteroot_center__') return;
       const noteData = notes.find(n => n._id === nid);
       if (!noteData) return;
       const parent = noteData.parentId ? notes.find(n => n._id === noteData.parentId) : undefined;
@@ -244,7 +353,7 @@ export default function GraphPage() {
     cyRef.current.on('dblclick', 'node', evt => {
       if (!cyRef.current) return;
       const nid = evt.target.id();
-      if (nid !== '__empty__') navigate(`/notes/${nid}`);
+      if (nid !== '__empty__' && nid !== '__noteroot_center__') navigate(`/notes/${nid}`);
     });
 
     cyRef.current.on('tap', evt => {
@@ -308,8 +417,10 @@ export default function GraphPage() {
         }}>
           <div style={{ color: '#5a6280', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '6px', fontSize: '10px' }}>Legend</div>
           {[
-            { dot: '#e2e8f4', size: 12, label: 'Root page' },
-            { dot: '#8892a4', size: 9,  label: 'Sub-page' },
+            { dot: '#eab308', size: 16, label: 'NoteRoot (Center)' },
+            { dot: '#60a5fa', size: 14, label: 'Root (Level 1)' },
+            { dot: '#34d399', size: 10, label: 'Sub-page (Level 2)' },
+            { dot: '#c084fc', size: 8,  label: 'Sub-page (Level 3+)' },
             { dot: '#c9a96e', size: 10, label: 'Selected' },
           ].map(({ dot, size, label }) => (
             <div key={label} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', color: '#8892a4' }}>

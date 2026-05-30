@@ -1,4 +1,5 @@
 import express from 'express';
+import cors from 'cors';
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import { createServer } from 'http';
@@ -27,6 +28,13 @@ const ALLOWED_ORIGINS = [
   'http://localhost:3000',
 ];
 
+const corsOptions: cors.CorsOptions = {
+  origin: ALLOWED_ORIGINS,
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+};
+
 const io = new Server(httpServer, {
   cors: {
     origin: ALLOWED_ORIGINS,
@@ -40,21 +48,10 @@ import graphRouter from './routes/graph';
 import authRouter from './routes/auth';
 import pluginsRouter from './routes/plugins';
 
-// Middleware — manual CORS headers (Express 5 compatible)
-app.use((req, res, next) => {
-  const origin = req.headers.origin;
-  if (origin && ALLOWED_ORIGINS.includes(origin)) {
-    res.setHeader('Access-Control-Allow-Origin', origin);
-  }
-  res.setHeader('Access-Control-Allow-Credentials', 'true');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization');
-  if (req.method === 'OPTIONS') {
-    res.status(204).end();
-    return;
-  }
-  next();
-});
+// ── CORS Middleware (must be BEFORE routes) ──────────────────────────
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));  // Handle all preflight OPTIONS requests
+
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 

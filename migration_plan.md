@@ -992,6 +992,8 @@ async def agent(request: Request, body: AgentRequest):
 
 ## Phase 7 — WebSocket {#phase-7}
 
+> **Current decision:** defer this phase. The client has no Socket.IO client usage and the legacy Socket.IO server only logs connection events. There is no user-facing real-time contract to preserve. Add a native WebSocket endpoint only with the first feature that needs server-pushed state.
+
 ### `backend/routers/websocket.py`
 
 ```python

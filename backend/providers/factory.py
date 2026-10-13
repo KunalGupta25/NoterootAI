@@ -54,6 +54,27 @@ class Provider:
             if chunk.choices and chunk.choices[0].delta.content:
                 yield chunk.choices[0].delta.content
 
+    async def agent(self, messages: list[dict], tools: list[dict], model: str | None, temperature: float, max_tokens: int):
+        import json
+        stream = await self.client.chat.completions.create(model=model or self.default_model, messages=messages, tools=tools, temperature=temperature, max_tokens=max_tokens, stream=True)
+        calls: dict[int, dict] = {}
+        async for chunk in stream:
+            if not chunk.choices:
+                continue
+            delta = chunk.choices[0].delta
+            if delta.content:
+                yield {"type": "text", "content": delta.content}
+            for call in delta.tool_calls or []:
+                entry = calls.setdefault(call.index, {"id": call.id, "name": "", "arguments": ""})
+                entry["name"] += call.function.name or ""
+                entry["arguments"] += call.function.arguments or ""
+        for call in calls.values():
+            try:
+                args = json.loads(call["arguments"])
+            except json.JSONDecodeError:
+                args = {}
+            yield {"type": "tool_request", "tool": call["name"], "args": args, "call_id": call["id"]}
+
 
 class AnthropicProvider(Provider):
     def __init__(self, api_key: str | None):

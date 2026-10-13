@@ -1,7 +1,8 @@
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 
-from schemas.ai import ChatRequest, EmbedBulkRequest, EmbedRequest, EmbedResponse, SearchRequest, SearchResponse, SuggestRequest, SuggestResponse
+from schemas.ai import AgentRequest, ChatRequest, EmbedBulkRequest, EmbedRequest, EmbedResponse, SearchRequest, SearchResponse, SuggestRequest, SuggestResponse
+from services.agent_service import run_agent
 from services.ai_service import chat, embed_note, search_notes, suggest_notes
 from services.vector_store import vector_store
 
@@ -45,3 +46,8 @@ async def suggest(request: SuggestRequest) -> SuggestResponse:
 @router.post("/chat")
 async def streaming_chat(request: ChatRequest) -> StreamingResponse:
     return StreamingResponse(chat(request), media_type="text/event-stream")
+
+
+@router.post("/agent")
+async def agent(request: AgentRequest) -> StreamingResponse:
+    return StreamingResponse(run_agent(request), media_type="text/event-stream")

@@ -1,9 +1,11 @@
 import express from 'express';
 import cors from 'cors';
-import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import { createServer } from 'http';
+import crypto from 'crypto';
 import { Server } from 'socket.io';
+import { config, corsOptions } from './config';
+import { connectMongo } from './database';
 
 // Load environment variables
 dotenv.config();
@@ -21,23 +23,9 @@ process.on('unhandledRejection', (reason) => {
 const app = express();
 const httpServer = createServer(app);
 
-// Allow Vercel frontend + localhost for dev
-const ALLOWED_ORIGINS = [
-  process.env.CLIENT_URL || 'https://noteroot-ai.vercel.app',
-  'http://localhost:5173',
-  'http://localhost:3000',
-];
-
-const corsOptions: cors.CorsOptions = {
-  origin: ALLOWED_ORIGINS,
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-};
-
 const io = new Server(httpServer, {
   cors: {
-    origin: ALLOWED_ORIGINS,
+    origin: config.allowedOrigins,
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
     credentials: true,
   },
@@ -51,6 +39,12 @@ import pluginsRouter from './routes/plugins';
 // ── CORS Middleware (must be BEFORE routes) ──────────────────────────
 // cors() middleware handles preflight OPTIONS automatically (preflightContinue defaults to false)
 app.use(cors(corsOptions));
+
+app.use((req, res, next) => {
+  const requestId = req.header('X-Request-Id') || crypto.randomUUID();
+  res.setHeader('X-Request-Id', requestId);
+  next();
+});
 
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
@@ -68,8 +62,13 @@ app.get('/api/health', (req, res) => {
 
 // Global error handler — catches any unhandled errors in route handlers
 // and prevents Express from crashing the process.
-app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-  console.error('[Express] Unhandled route error:', err);
+app.use((err: unknown, req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  console.error('[Express] Unhandled route error', {
+    requestId: res.getHeader('X-Request-Id'),
+    method: req.method,
+    path: req.path,
+    error: err,
+  });
   if (!res.headersSent) {
     res.status(500).json({ error: 'Internal server error' });
   }
@@ -87,32 +86,9 @@ io.on('connection', (socket) => {
 import './neo4j'; // Initialize Neo4j driver
 
 // Database Connection — start server immediately so Railway health check passes
-const PORT = process.env.PORT || 5000;
-const MONGODB_URI = process.env.MONGODB_URI;
-
 // Always start listening right away (Railway requires the port to be bound quickly)
-httpServer.listen(Number(PORT), '0.0.0.0', () => {
-  console.log(`Server is running on port ${PORT} (0.0.0.0)`);
+httpServer.listen(config.port, '0.0.0.0', () => {
+  console.log(`Server is running on port ${config.port} (0.0.0.0)`);
 });
 
-// Connect to MongoDB in the background (non-fatal if it fails)
-if (MONGODB_URI) {
-  mongoose
-    .connect(MONGODB_URI)
-    .then(() => {
-      console.log('Connected to MongoDB Atlas');
-    })
-    .catch((error) => {
-      console.error('MongoDB connection error:', error);
-    });
-
-  // Auto-reconnect on disconnect
-  mongoose.connection.on('disconnected', () => {
-    console.warn('[MongoDB] Disconnected — will auto-reconnect');
-  });
-  mongoose.connection.on('error', (err) => {
-    console.error('[MongoDB] Connection error:', err);
-  });
-} else {
-  console.log('No MONGODB_URI provided. Running without DB connection.');
-}
+connectMongo(config.mongodbUri);

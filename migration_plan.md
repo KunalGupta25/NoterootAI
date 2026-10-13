@@ -1429,8 +1429,8 @@ export const AI_URL = BACKEND_URL;
 - [ ] `POST /search` → ranked results returned
 
 ### Docker
-- [ ] `docker build -t noterootai .` → exits 0
-- [ ] `docker run -p 8000:8000 --env-file .env noterootai` → starts cleanly
+- [ ] `docker build -f backend/Dockerfile -t noterootai .` → exits 0
+- [ ] `docker run -p 8000:8000 --env-file backend/.env noterootai` → starts cleanly
 - [ ] `curl http://localhost:8000/api/health` → `{"status":"ok"}`
 - [ ] `/docs` → Swagger UI loads
 - [ ] Stop container, restart → ChromaDB data persists (volume mount)

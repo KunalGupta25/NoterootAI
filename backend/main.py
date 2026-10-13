@@ -10,6 +10,7 @@ from core.database import mongo
 from core.middleware import install_middleware
 from core.neo4j_driver import neo4j
 from routers.auth import router as auth_router
+from routers.ai import router as ai_router
 from routers.graph import router as graph_router
 from routers.notes import router as notes_router
 from routers.plugins import router as plugins_router
@@ -40,6 +41,7 @@ def create_app() -> FastAPI:
     )
     install_middleware(app)
     app.include_router(auth_router)
+    app.include_router(ai_router)
     app.include_router(notes_router)
     app.include_router(graph_router)
     app.include_router(plugins_router)

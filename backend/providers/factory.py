@@ -102,6 +102,11 @@ class AnthropicProvider(Provider):
             async for text in stream.text_stream:
                 yield text
 
+    async def agent(self, messages: list[dict], tools: list[dict], model: str | None, temperature: float, max_tokens: int):
+        compatible = [Message(role=item["role"], content=item.get("content") or "") for item in messages if item["role"] in {"system", "user", "assistant"}]
+        async for text in self.chat(compatible, model, temperature, max_tokens):
+            yield {"type": "text", "content": text}
+
 
 def get_provider(name: str = "openai", api_key: str | None = None, custom_base_url: str | None = None):
     name = (name or "openai").lower()

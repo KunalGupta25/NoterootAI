@@ -4,11 +4,14 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 
 from config import get_settings
 from core.database import mongo
 from core.middleware import install_middleware
 from core.neo4j_driver import neo4j
+from core.rate_limit import limiter
 from routers.auth import router as auth_router
 from routers.ai import router as ai_router
 from routers.graph import router as graph_router
@@ -25,6 +28,10 @@ async def lifespan(_: FastAPI):
             await connect(settings)
         except Exception:
             logging.exception("%s connection failed; the service will remain available for health checks", name)
+    try:
+        await mongo.ensure_indexes()
+    except Exception:
+        logging.exception("MongoDB index setup failed")
     yield
     await neo4j.close()
     await mongo.close()
@@ -32,6 +39,8 @@ async def lifespan(_: FastAPI):
 
 def create_app() -> FastAPI:
     app = FastAPI(title=settings.app_name, lifespan=lifespan)
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,

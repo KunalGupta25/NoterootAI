@@ -1218,6 +1218,9 @@ Dedicated VPS       (4 vCPU)  → WEB_CONCURRENCY=9
 
 ### Rate Limits by Endpoint Type
 
+The current backend applies a process-local `120/minute` default using `slowapi`.
+Use a Redis-backed store before horizontally scaling if a shared global limit is required.
+
 | Endpoint | Limit | Reason |
 |---|---|---|
 | `/api/auth/signup` | 10/min | Prevent mass account creation |

@@ -31,8 +31,8 @@ NoteRootAI bridges the gap between traditional note-taking apps and advanced AI 
 
 NoteRootAI is built on a robust three-tier architecture ensuring separation of concerns:
 1. **Client (Frontend):** React + Vite, Tailwind CSS, Tiptap (Editor), Cytoscape (Graph), Zustand (State), and a secure Iframe Sandbox for Plugin/Agent execution.
-2. **Server (Backend Core):** Node.js + Express, MongoDB Atlas, Neo4j, Socket.io.
-3. **AI Service (Microservice):** Python FastAPI, ChromaDB (Local Vector DB).
+2. **Backend Core:** FastAPI, MongoDB Atlas, and Neo4j AuraDB.
+3. **AI Retrieval:** Neo4j vector indexes store embeddings with the knowledge graph.
 
 ```mermaid
 graph TD
@@ -45,10 +45,10 @@ graph TD
         Sandbox[Iframe Execution Sandbox]
     end
 
-    %% Server Tier
-    subgraph Server [Express Backend]
-        API[Node.js REST API]
+    subgraph Server [FastAPI Backend]
+        API[FastAPI REST API]
         Auth[Auth Middleware]
+        RAG[RAG and Agent Engine]
     end
 
     %% Database Tier
@@ -57,14 +57,7 @@ graph TD
         Neo4j[(Neo4j Graph DB)]
     end
 
-    %% AI Tier
-    subgraph AIService [Python AI Microservice]
-        FastAPI[FastAPI Server]
-        RAG[RAG Engine]
-        Agent[Autonomous Agent Engine]
-        Chroma[(ChromaDB Vectors)]
-        LLM((LLM Providers\nOpenAI/Groq/Gemini/Custom))
-    end
+    LLM((LLM Providers\nOpenAI/Groq/Gemini/Custom))
 
     %% Connections
     UI <-->|State/Sync| Store
@@ -74,12 +67,11 @@ graph TD
     Auth <--> Mongo
     Auth <--> Neo4j
 
-    Store <-->|Auto-Embed / Chat / Agent| FastAPI
+    Store <-->|Auto-Embed / Chat / Agent| API
     Sandbox <-->|Secure API Bridge| Store
-    FastAPI <--> Chroma
-    FastAPI <--> LLM
-    RAG <--> Chroma
-    Agent <-->|Triggers Tools| Sandbox
+    API <--> LLM
+    RAG <--> Neo4j
+    RAG --> Sandbox
 ```
 
 ---
@@ -107,11 +99,11 @@ d:\NoteRoot2\
 │   │   └── app.ts              # Express Server setup
 │   └── package.json
 │
-└── ai-service/                 # Python FastAPI AI Microservice
+└── backend/                    # Unified FastAPI backend
     ├── providers/              # LLM factory (OpenAI, Gemini, Anthropic, Custom)
-    ├── services/               # RAG, Embedding, Agent Tool definitions
-    ├── chroma_db/              # Local persistent vector database
-    ├── main.py                 # FastAPI endpoints
+    ├── services/               # RAG, Neo4j embeddings, and agent tools
+    ├── routers/                # Auth, notes, graph, plugins, and AI endpoints
+    ├── main.py                 # FastAPI application
     └── requirements.txt
 ```
 
@@ -169,7 +161,7 @@ flowchart TD
     AutoSave -- Local --> IndexedDB[(IndexedDB)]
     AutoSave -- Cloud --> Mongo[(MongoDB Atlas)]
     AutoSave -- Graph --> Neo4j[(Neo4j AuraDB)]
-    AutoSave -- Vectorize --> Chroma[(ChromaDB)]
+    AutoSave -- Vectorize --> Neo4j[(Neo4j Vector Index)]
     
     Graph --> ViewLinks[Explore Node Relationships]
     
@@ -197,7 +189,7 @@ flowchart TD
 ### Phase 2: AI Engine & RAG (100% Complete)
 - **BYOK (Bring Your Own Key):** Dynamic factory supporting multiple built-in providers (Gemini, OpenAI, Anthropic, Mistral, Groq).
 - **Custom Local LLMs:** Easily add any OpenAI-compatible API (Ollama, OpenRouter, etc.) and specify custom models dynamically.
-- **Auto-Embedding Pipeline:** Background task that chunks your notes and indexes them in a local ChromaDB instance without interrupting your typing.
+- **Auto-Embedding Pipeline:** Chunks notes and stores embeddings in Neo4j vector indexes without interrupting your typing.
 - **Semantic Retrieval:** Suggests related notes based on semantic similarity.
 - **Contextual Chat:** Fully streaming AI chat that automatically references your personal vault context.
 

@@ -1,49 +1,70 @@
 import re
 
 from bs4 import BeautifulSoup
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-
 from providers.factory import get_provider
 from schemas.ai import ChatRequest, EmbedRequest, SearchRequest, SearchResponse, SearchResult, SuggestRequest, SuggestResponse, SuggestResult
 from services.vector_store import vector_store
 
-splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+
+def split_text(text: str, chunk_size: int = 1000, overlap: int = 200) -> list[str]:
+    """Split text on word boundaries without loading a general-purpose RAG framework."""
+    chunks: list[str] = []
+    start = 0
+    text = text.strip()
+    while start < len(text):
+        end = min(start + chunk_size, len(text))
+        if end < len(text):
+            boundary = text.rfind(" ", start + chunk_size // 2, end)
+            if boundary > start:
+                end = boundary
+        chunk = text[start:end].strip()
+        if chunk:
+            chunks.append(chunk)
+        if end >= len(text):
+            break
+        start = max(end - overlap, start + 1)
+    return chunks
 
 
 async def embed_note(request: EmbedRequest) -> int:
     provider = get_provider(request.provider, request.api_key, request.custom_base_url)
-    collection = vector_store.collection(provider.collection_name())
+    collection = provider.collection_name()
     text = BeautifulSoup(request.content, "html.parser").get_text(separator="\n\n", strip=True)
-    chunks = splitter.split_text(f"Title: {request.title}\nTags: {', '.join(request.tags)}\n\n{text}")
-    collection.delete(where={"note_id": request.note_id})
+    chunks = split_text(f"Title: {request.title}\nTags: {', '.join(request.tags)}\n\n{text}")
     if not chunks:
         return 0
-    collection.upsert(
-        ids=[f"{request.note_id}_{index}" for index in range(len(chunks))],
-        embeddings=await provider.embed(chunks),
+    await vector_store.upsert(
+        collection=collection,
+        note_id=request.note_id,
+        title=request.title,
+        tags=request.tags,
         documents=chunks,
-        metadatas=[{"note_id": request.note_id, "title": request.title, "tags": ",".join(request.tags)} for _ in chunks],
+        embeddings=await provider.embed(chunks),
     )
     return len(chunks)
 
 
 async def search_notes(request: SearchRequest) -> SearchResponse:
     provider = get_provider(request.provider, request.api_key, request.custom_base_url)
-    collection = vector_store.collection(provider.collection_name())
-    count = collection.count()
-    if not count:
-        return SearchResponse(results=[])
-    result = collection.query(query_embeddings=await provider.embed([request.query]), n_results=min(request.top_k, count), include=["documents", "metadatas", "distances"])
+    result = await vector_store.search(
+        provider.collection_name(),
+        (await provider.embed([request.query]))[0],
+        request.top_k,
+    )
     found: list[SearchResult] = []
     seen: set[str] = set()
-    for index, note_id in enumerate(result["ids"][0]):
-        metadata = result["metadatas"][0][index]
-        source_id = metadata["note_id"]
+    for item in result:
+        source_id = item["note_id"]
         if source_id in seen:
             continue
         seen.add(source_id)
-        document = result["documents"][0][index]
-        found.append(SearchResult(note_id=source_id, title=metadata["title"], excerpt=document[:300], score=max(0.0, 1 - result["distances"][0][index]), tags=metadata.get("tags", "").split(",") if metadata.get("tags") else []))
+        found.append(SearchResult(
+            note_id=source_id,
+            title=item.get("title") or "Untitled Note",
+            excerpt=(item.get("content") or "")[:300],
+            score=float(item["score"]),
+            tags=item.get("tags") or [],
+        ))
     return SearchResponse(results=found)
 
 

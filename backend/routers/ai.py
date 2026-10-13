@@ -11,7 +11,7 @@ router = APIRouter(tags=["ai"])
 
 @router.get("/health")
 async def ai_health() -> dict:
-    return {"status": "ok", "providers": {name: True for name in ("openai", "anthropic", "gemini", "mistral", "groq")}, "vector_store": True, "notes_indexed": vector_store.count_all()}
+    return {"status": "ok", "providers": {name: True for name in ("openai", "anthropic", "gemini", "mistral", "groq")}, "vector_store": "neo4j", "notes_indexed": await vector_store.count_all()}
 
 
 @router.post("/embed", response_model=EmbedResponse)

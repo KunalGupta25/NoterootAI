@@ -49,7 +49,7 @@
 ┌──────────────────────────────────────────────────┐
 │     Docker Container: noterootai-backend          │
 │                                                   │
-│  Gunicorn → 4 × UvicornWorker (async)            │
+│  Gunicorn → 1 × UvicornWorker (async)            │
 │                                                   │
 │  /api/auth/*     Auth Router                      │
 │  /api/notes/*    Notes Router                     │
@@ -58,13 +58,13 @@
 │  /api/ws         WebSocket (native)               │
 │  /embed  /chat  /agent  /search  /suggest  /health│
 │                                                   │
-│  Volume: /app/chroma_db (ChromaDB vectors)        │
+│  Neo4j vector indexes: note embeddings            │
 │  Port: 8000                                       │
 └──────────────────────────────────────────────────┘
 
 External Cloud:
   MongoDB Atlas  → Notes, Users, Plugins
-  Neo4j AuraDB  → Graph ([[wiki-links]])
+  Neo4j AuraDB  → Graph and note embeddings
 
 Client (Vercel):
   React + Vite → calls single BACKEND_URL:8000
@@ -116,11 +116,7 @@ python-jose[cryptography]==3.3.0
 python-multipart==0.0.9
 cryptography==43.0.0
 openai==1.51.0
-google-genai==0.8.0
 anthropic==0.34.0
-mistralai==1.0.3
-chromadb==0.5.15
-langchain-text-splitters==0.3.0
 beautifulsoup4==4.12.3
 slowapi==0.1.9
 python-dotenv==1.0.1
@@ -267,12 +263,11 @@ class Settings(BaseSettings):
     neo4j_uri: str = ""
     neo4j_username: str = "neo4j"
     neo4j_password: str = ""
-    neo4j_database: str = "neo4j"
+    neo4j_database: str = ""
     jwt_secret: str = "CHANGE_ME_IN_PRODUCTION"
     jwt_algorithm: str = "HS256"
     jwt_expire_days: int = 7
     encryption_key: str = ""
-    chroma_persist_dir: str = "./chroma_db"
     default_provider: str = "gemini"
     default_embedding_model: str = "text-embedding-3-small"
     default_chat_model_openai: str = "gpt-4o-mini"
@@ -1081,7 +1076,6 @@ COPY . .
 
 # Non-root user for security
 RUN useradd -m -u 1001 appuser && \
-    mkdir -p /app/chroma_db && \
     chown -R appuser:appuser /app
 USER appuser
 
@@ -1091,7 +1085,7 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
 EXPOSE 8000
 
 CMD gunicorn main:app \
-    --workers ${WEB_CONCURRENCY:-4} \
+    --workers ${WEB_CONCURRENCY:-1} \
     --worker-class uvicorn.workers.UvicornWorker \
     --bind 0.0.0.0:8000 \
     --timeout 120 \
@@ -1122,10 +1116,7 @@ services:
       NEO4J_PASSWORD: ${NEO4J_PASSWORD}
       JWT_SECRET: ${JWT_SECRET}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY}
-      WEB_CONCURRENCY: "4"
-      CHROMA_PERSIST_DIR: /app/chroma_db
-    volumes:
-      - chroma_data:/app/chroma_db     # Persist vectors
+      WEB_CONCURRENCY: "1"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
       interval: 30s
@@ -1145,9 +1136,6 @@ services:
     depends_on:
       - backend
 
-volumes:
-  chroma_data:
-    driver: local
 ```
 
 ### `backend/nginx.conf`
@@ -1195,9 +1183,8 @@ JWT_SECRET=at-least-32-random-chars
 ENCRYPTION_KEY=generate-with: python -c "import secrets; print(secrets.token_hex(32))"
 
 # Runtime
-WEB_CONCURRENCY=4
+WEB_CONCURRENCY=1
 PORT=8000
-CHROMA_PERSIST_DIR=./chroma_db
 DEFAULT_PROVIDER=gemini
 
 # Client origins
@@ -1428,7 +1415,7 @@ export const AI_URL = BACKEND_URL;
 - [ ] `GET /api/graph/` → returns array of Cytoscape nodes and edges
 
 ### AI
-- [ ] `POST /embed` → chunks stored in ChromaDB
+- [ ] `POST /embed` → chunks stored as `NoteChunk` nodes in Neo4j
 - [ ] `POST /chat` → SSE stream with text chunks
 - [ ] `POST /agent` → `tool_request` event emitted, then `[DONE]`
 - [ ] `POST /search` → ranked results returned
@@ -1438,7 +1425,7 @@ export const AI_URL = BACKEND_URL;
 - [ ] `docker run -p 8000:8000 --env-file backend/.env noterootai` → starts cleanly
 - [ ] `curl http://localhost:8000/api/health` → `{"status":"ok"}`
 - [ ] `/docs` → Swagger UI loads
-- [ ] Stop container, restart → ChromaDB data persists (volume mount)
+- [ ] Stop container, restart → semantic search remains available through Neo4j
 
 ### Client
 - [ ] All API calls point to single `BACKEND_URL`
@@ -1508,7 +1495,7 @@ export const AI_URL = BACKEND_URL;
 | Path | Prerequisite |
 |---|---|
 | `server/` (entire) | FastAPI contract parity, client cutover, and completed rollback window |
-| `ai-service/` (entire) | AI endpoints and ChromaDB persistence verified in `backend/` |
+| `ai-service/` (entire) | AI endpoints and Neo4j vector search verified in `backend/` |
 
 ---
 
@@ -1523,8 +1510,7 @@ export const AI_URL = BACKEND_URL;
 | `NEO4J_PASSWORD` | ✅ | AuraDB password |
 | `JWT_SECRET` | ✅ | 32+ char random string |
 | `ENCRYPTION_KEY` | ✅ | 64-char hex. Generate: `python -c "import secrets; print(secrets.token_hex(32))"` |
-| `WEB_CONCURRENCY` | ❌ | Gunicorn worker count (default: 4) |
-| `CHROMA_PERSIST_DIR` | ❌ | Vector DB path (default: `./chroma_db`) |
+| `WEB_CONCURRENCY` | ❌ | Gunicorn worker count (default: 1) |
 | `PORT` | ❌ | Listen port (default: 8000) |
 | `CLIENT_ORIGINS` | ❌ | Comma-separated allowed origins |
 | `VITE_BACKEND_URL` | ✅ (client) | Full URL of unified backend |
@@ -1540,7 +1526,7 @@ export const AI_URL = BACKEND_URL;
 2. Link GitHub repo → Root Directory: "backend/"
 3. Railway auto-detects Dockerfile
 4. Add all env vars in Variables panel
-5. Add Volume at mount path: /app/chroma_db
+5. Set `WEB_CONCURRENCY=1` for the smallest instance
 6. Expose port: 8000
 7. Get deploy URL → set VITE_BACKEND_URL in Vercel dashboard
 ```
@@ -1552,7 +1538,7 @@ export const AI_URL = BACKEND_URL;
 2. Root directory: backend/
 3. Dockerfile path: Dockerfile
 4. Add all env vars
-5. Add Persistent Disk at /app/chroma_db
+5. Set `WEB_CONCURRENCY=1`; no persistent disk is required for vectors
 ```
 
 ### Option C: VPS (Ubuntu + Docker)
@@ -1616,4 +1602,4 @@ After the rollback window
   Retire Railway Node service and delete `server/` only after the Express Transition checklist is complete.
 ```
 
-> **Final Result:** One Python Docker container, 4 Gunicorn workers, ~40% smaller image than the old Node+Python dual-container setup. Swagger UI at `/docs`. All endpoints rate-limited. ChromaDB on a persistent volume. Background tasks for embeddings/Neo4j sync mean note saves respond in under 50ms even under AI workload.
+> **Final Result:** One Python Docker container, one configurable Gunicorn worker by default, and Neo4j stores both the note graph and embeddings. Swagger UI is available at `/docs`; all endpoints are rate-limited. ChromaDB and its persistent application volume are removed. Existing notes must be re-embedded before semantic search returns their historic content.

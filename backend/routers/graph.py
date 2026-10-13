@@ -11,7 +11,7 @@ router = APIRouter(prefix="/api/graph", tags=["graph"])
 async def get_graph(user_id: str = Depends(require_user_id)) -> list[dict]:
     if neo4j.driver is None:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Graph database unavailable")
-    async with neo4j.driver.session() as session:
+    async with neo4j.session() as session:
         result = await session.run(
             """
             MATCH (n:Note {userId: $user_id})

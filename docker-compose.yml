@@ -6,12 +6,7 @@ services:
     env_file:
       - backend/.env
     environment:
-      CHROMA_PERSIST_DIR: /data/chroma_db
+      WEB_CONCURRENCY: 1
     ports:
       - "8000:8000"
-    volumes:
-      - chroma_data:/data/chroma_db
     restart: unless-stopped
-
-volumes:
-  chroma_data:

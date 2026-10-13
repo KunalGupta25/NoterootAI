@@ -1,6 +1,6 @@
 from neo4j import AsyncDriver, AsyncGraphDatabase
 
-from config import Settings
+from config import Settings, get_settings
 
 
 class Neo4jDatabase:
@@ -19,6 +19,12 @@ class Neo4jDatabase:
         if self.driver:
             await self.driver.close()
         self.driver = None
+
+    def session(self):
+        if self.driver is None:
+            raise RuntimeError("Graph database unavailable")
+        database = get_settings().neo4j_database
+        return self.driver.session(database=database) if database else self.driver.session()
 
 
 neo4j = Neo4jDatabase()

@@ -15,10 +15,6 @@ __pycache__/
 *.pyd
 .pytest_cache/
 
-# Vector Databases
-ai-service/chroma_db/
-chroma_db/
-
 # Build outputs
 dist/
 build/

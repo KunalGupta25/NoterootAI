@@ -7,9 +7,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY backend/ .
 
-RUN useradd --create-home appuser && mkdir -p /data/chroma_db && chown -R appuser /app /data
+RUN useradd --create-home appuser && chown -R appuser /app
 USER appuser
 
 EXPOSE 8000
 
-CMD ["gunicorn", "--workers", "4", "--worker-class", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8000", "main:app"]
+CMD ["sh", "-c", "exec gunicorn --workers ${WEB_CONCURRENCY:-1} --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:${PORT:-8000} main:app"]

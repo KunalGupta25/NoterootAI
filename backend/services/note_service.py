@@ -13,7 +13,7 @@ def now() -> datetime:
 async def sync_note(note: dict, update_links: bool = False) -> None:
     if neo4j.driver is None:
         return
-    async with neo4j.driver.session() as session:
+    async with neo4j.session() as session:
         await session.run(
             "MERGE (n:Note {id: $id}) SET n.title = $title, n.userId = $user_id",
             id=note["_id"],
@@ -43,5 +43,5 @@ async def sync_note(note: dict, update_links: bool = False) -> None:
 async def delete_note_from_graph(note_id: str) -> None:
     if neo4j.driver is None:
         return
-    async with neo4j.driver.session() as session:
+    async with neo4j.session() as session:
         await session.run("MATCH (n:Note {id: $id}) DETACH DELETE n", id=note_id)

@@ -1,13 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import AppShell from './components/Layout/AppShell';
-import Dashboard from './pages/Dashboard';
-import NoteEditorPage from './pages/NoteEditorPage';
-import GraphPage from './pages/GraphPage';
-import AIChatPage from './pages/AIChatPage';
-import PluginsPage from './pages/PluginsPage';
-import SettingsPage from './pages/SettingsPage';
-import AuthPage from './pages/AuthPage';
-import { useEffect } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import { useNoteStore } from './stores/noteStore';
 import { useAuthStore } from './stores/authStore';
 import { useSettingsStore } from './stores/settingsStore';
@@ -20,6 +13,18 @@ import { markdownImporterPlugin } from './plugins/builtin/markdownImporter';
 import { zipImporterPlugin } from './plugins/builtin/zipImporter';
 import { tabManagerPlugin } from './plugins/builtin/tabManager';
 import { noteDownloaderPlugin } from './plugins/builtin/noteDownloader';
+
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const NoteEditorPage = lazy(() => import('./pages/NoteEditorPage'));
+const GraphPage = lazy(() => import('./pages/GraphPage'));
+const AIChatPage = lazy(() => import('./pages/AIChatPage'));
+const PluginsPage = lazy(() => import('./pages/PluginsPage'));
+const SettingsPage = lazy(() => import('./pages/SettingsPage'));
+const AuthPage = lazy(() => import('./pages/AuthPage'));
+
+function RouteFallback() {
+  return <div style={{ padding: '24px', color: 'var(--muted)' }}>Loading…</div>;
+}
 
 // Immediately create a new note and redirect to it (so vault stays in sync)
 function NewNotePage() {
@@ -87,6 +92,7 @@ function App() {
 
   return (
     <BrowserRouter>
+      <Suspense fallback={<RouteFallback />}>
       <Routes>
         <Route path="/auth" element={<AuthPage />} />
         <Route path="/" element={token ? <AppShell /> : <Navigate to="/auth" replace />}>
@@ -100,6 +106,7 @@ function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>
+      </Suspense>
       <PluginOverlays />
     </BrowserRouter>
   );

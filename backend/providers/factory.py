@@ -3,7 +3,6 @@ import math
 import re
 from collections.abc import AsyncGenerator
 
-import anthropic
 import openai
 
 from config import get_settings
@@ -76,42 +75,10 @@ class Provider:
             yield {"type": "tool_request", "tool": call["name"], "args": args, "call_id": call["id"]}
 
 
-class AnthropicProvider(Provider):
-    def __init__(self, api_key: str | None):
-        settings = get_settings()
-        self.name = "anthropic"
-        self.api_key = api_key or settings.anthropic_api_key
-        if not self.api_key:
-            raise ValueError("anthropic API key not provided")
-        self.default_model = settings.default_chat_model_anthropic
-        self.client = anthropic.AsyncAnthropic(api_key=self.api_key)
-
-    def collection_name(self) -> str:
-        return "notes_anthropic_1536"
-
-    async def chat(self, messages: list[Message], model: str | None, temperature: float, max_tokens: int) -> AsyncGenerator[str, None]:
-        system = "\n\n".join(message.content for message in messages if message.role == "system")
-        prompt = [{"role": message.role, "content": message.content} for message in messages if message.role in {"user", "assistant"}]
-        async with self.client.messages.stream(
-            model=model or self.default_model,
-            system=system or anthropic.NOT_GIVEN,
-            messages=prompt,
-            temperature=temperature,
-            max_tokens=max_tokens,
-        ) as stream:
-            async for text in stream.text_stream:
-                yield text
-
-    async def agent(self, messages: list[dict], tools: list[dict], model: str | None, temperature: float, max_tokens: int):
-        compatible = [Message(role=item["role"], content=item.get("content") or "") for item in messages if item["role"] in {"system", "user", "assistant"}]
-        async for text in self.chat(compatible, model, temperature, max_tokens):
-            yield {"type": "text", "content": text}
-
-
 def get_provider(name: str = "openai", api_key: str | None = None, custom_base_url: str | None = None):
     name = (name or "openai").lower()
-    if name == "anthropic":
-        return AnthropicProvider(api_key)
+    if name not in {"openai", "gemini", "mistral", "groq", "custom"}:
+        raise ValueError(f"Unsupported provider: {name}")
     endpoints = {
         "gemini": "https://generativelanguage.googleapis.com/v1beta/openai/",
         "mistral": "https://api.mistral.ai/v1",

@@ -10,7 +10,12 @@ class MongoDatabase:
     async def connect(self, settings: Settings) -> None:
         if not settings.mongodb_uri:
             return
-        self.client = AsyncIOMotorClient(settings.mongodb_uri)
+        self.client = AsyncIOMotorClient(
+            settings.mongodb_uri,
+            maxPoolSize=settings.database_max_pool_size,
+            minPoolSize=0,
+            serverSelectionTimeoutMS=5000,
+        )
         self.database = self.client[settings.mongodb_db_name]
         await self.database.command("ping")
 

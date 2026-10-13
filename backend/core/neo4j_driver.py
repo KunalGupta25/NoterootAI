@@ -12,6 +12,7 @@ class Neo4jDatabase:
         self.driver = AsyncGraphDatabase.driver(
             settings.neo4j_uri,
             auth=(settings.neo4j_username, settings.neo4j_password),
+            max_connection_pool_size=settings.neo4j_max_connection_pool_size,
         )
         await self.driver.verify_connectivity()
 

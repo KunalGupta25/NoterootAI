@@ -103,7 +103,6 @@ export const useSettingsStore = create<SettingsState>()(
       providerModels: {
         openai: 'gpt-4o-mini',
         gemini: 'gemini-3.5-flash',
-        anthropic: 'claude-sonnet-4-5',
         mistral: 'mistral-large-latest',
         groq: 'llama-3.3-70b-versatile',
       },
@@ -308,9 +307,14 @@ export const useSettingsStore = create<SettingsState>()(
         }
         // v1 → v2 (noteroot-settings-v2): providerKeys were missing, nothing to do
         // v2 → v3 (noteroot-settings-v3): providerKeys now included, keep as-is
+        if (version < 4 && persisted) {
+          delete persisted.providerKeys?.anthropic;
+          delete persisted.providerModels?.anthropic;
+          if (persisted.activeProvider === 'anthropic') persisted.activeProvider = 'gemini';
+        }
         return persisted;
       },
-      version: 3,
+      version: 4,
     }
   )
 );

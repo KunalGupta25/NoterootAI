@@ -9,7 +9,7 @@ async def main() -> None:
     settings = get_settings()
     await neo4j.connect(settings)
     try:
-        for provider in ("openai", "anthropic", "gemini", "mistral", "groq"):
+        for provider in ("openai", "gemini", "mistral", "groq"):
             await vector_store.ensure_collection(f"notes_{provider}_1536", 1536)
         await vector_store.search("notes_openai_1536", [1.0, *([0.0] * 1535)], 1)
         print("Neo4j vector indexes are ready and searchable")

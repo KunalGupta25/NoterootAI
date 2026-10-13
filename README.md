@@ -23,7 +23,7 @@ NoteRootAI bridges the gap between traditional note-taking apps and advanced AI 
 - **Offline-First:** All notes and media are saved instantly to your local browser using IndexedDB, allowing you to write without an internet connection.
 - **Knowledge Graph:** Like Obsidian, your notes are visually connected in a graph. Typing `[[Note Title]]` automatically forms a relationship mapped in Neo4j.
 - **AI RAG & Autonomous Agent:** An embedded AI service automatically chunks and vectorizes your notes. You can chat with your knowledge base, or empower the AI Agent to autonomously execute tools to create, read, append, update, and organize your vault for you!
-- **Bring Your Own Key (BYOK):** Supports OpenAI, Anthropic, Gemini, Mistral, Groq, and entirely custom OpenAI-compatible local endpoints (like Ollama or OpenRouter) natively out of the box.
+- **Bring Your Own Key (BYOK):** Uses one OpenAI-compatible connection for OpenAI, Gemini, Mistral, Groq, and custom local endpoints such as Ollama or OpenRouter.
 
 ---
 
@@ -100,7 +100,7 @@ d:\NoteRoot2\
 │   └── package.json
 │
 └── backend/                    # Unified FastAPI backend
-    ├── providers/              # LLM factory (OpenAI, Gemini, Anthropic, Custom)
+    ├── providers/              # OpenAI-compatible LLM factory
     ├── services/               # RAG, Neo4j embeddings, and agent tools
     ├── routers/                # Auth, notes, graph, plugins, and AI endpoints
     ├── main.py                 # FastAPI application
@@ -187,14 +187,14 @@ flowchart TD
 - **Authentication:** Secure user login and signup to sync notes across multiple devices.
 
 ### Phase 2: AI Engine & RAG (100% Complete)
-- **BYOK (Bring Your Own Key):** Dynamic factory supporting multiple built-in providers (Gemini, OpenAI, Anthropic, Mistral, Groq).
+- **BYOK (Bring Your Own Key):** One OpenAI-compatible factory supports Gemini, OpenAI, Mistral, Groq, and custom compatible endpoints.
 - **Custom Local LLMs:** Easily add any OpenAI-compatible API (Ollama, OpenRouter, etc.) and specify custom models dynamically.
 - **Auto-Embedding Pipeline:** Chunks notes and stores embeddings in Neo4j vector indexes without interrupting your typing.
 - **Semantic Retrieval:** Suggests related notes based on semantic similarity.
 - **Contextual Chat:** Fully streaming AI chat that automatically references your personal vault context.
 
 ### Phase 3: Autonomous Agent & Extensibility (100% Complete)
-- **Agentic Workflow:** The AI can now act as an autonomous agent, equipped with a suite of backend tools to actively manage your vault.
+- **Agentic Workflow:** The backend streams model responses while the client executes note and plugin tools against its local vault.
 - **Vault Manipulation Tools:** The agent can dynamically `list_all_notes`, `read_note`, `create_note`, `create_sub_note`, `update_note`, `append_to_note`, and `delete_note`.
 - **Smart Note Resolution:** Agent tools feature case-insensitive fallback logic, enabling it to look up notes by both exact ID or natural Language Title automatically.
 - **Secure Sandbox Bridge:** Plugin & Agent code is executed securely using an isolated Iframe Sandbox that safely bridges validated API calls back to the main thread `zustand` store.

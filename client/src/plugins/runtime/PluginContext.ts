@@ -4,6 +4,7 @@ import { useSettingsStore } from '../../stores/settingsStore';
 import { ThemeEngine } from './ThemeEngine';
 import PluginRuntime from './PluginRuntime';
 import { AI_URL } from '../../lib/constants';
+import { isBuiltinProvider } from '../../lib/providerConfig';
 
 /**
  * The safe API injected into plugins.
@@ -121,7 +122,7 @@ export class PluginContext {
       
       let apiKey = '';
       let customBaseUrl = undefined;
-      const isBuiltin = ['openai', 'anthropic', 'gemini', 'mistral', 'groq'].includes(activeProvider);
+      const isBuiltin = isBuiltinProvider(activeProvider);
       
       if (isBuiltin) {
         apiKey = (settingsStore.providerKeys as any)[activeProvider] || '';

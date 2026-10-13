@@ -2,6 +2,10 @@
 
 > **Goal:** Replace Node.js/Express with a unified Python FastAPI backend, merge the AI microservice into it, run everything in a single Docker container, improve load handling, and enhance the UI/UX.
 
+> **Current deployment target:** Run one FastAPI worker with bounded MongoDB and Neo4j connection pools. Use the single OpenAI-compatible SDK for OpenAI, Gemini, Mistral, Groq, and compatible custom endpoints. Raw Anthropic support is removed. `/docs` remains available. New notes are indexed in Neo4j; no historic-note re-embedding job is planned.
+
+> **Client execution boundary:** Community plugins and agent vault tools run in the browser against the local note cache. The backend handles authentication, persistence, Neo4j indexing, and provider streaming only.
+
 ---
 
 ## Table of Contents
@@ -116,7 +120,6 @@ python-jose[cryptography]==3.3.0
 python-multipart==0.0.9
 cryptography==43.0.0
 openai==1.51.0
-anthropic==0.34.0
 beautifulsoup4==4.12.3
 slowapi==0.1.9
 python-dotenv==1.0.1
@@ -176,7 +179,6 @@ backend/
     ├── base.py
     ├── factory.py
     ├── openai_provider.py
-    └── anthropic_provider.py
 ```
 
 ---
@@ -272,7 +274,6 @@ class Settings(BaseSettings):
     default_embedding_model: str = "text-embedding-3-small"
     default_chat_model_openai: str = "gpt-4o-mini"
     default_chat_model_gemini: str = "gemini-1.5-flash"
-    default_chat_model_anthropic: str = "claude-3-5-haiku-20241022"
     default_chat_model_mistral: str = "mistral-small-latest"
     default_chat_model_groq: str = "llama-3.3-70b-versatile"
     rate_limit_default: str = "200/minute"
@@ -918,7 +919,7 @@ async def full_health():
     return {
         "status": "ok",
         "notes_indexed": vector_store.count_all(),
-        "providers": {"openai": True, "gemini": True, "anthropic": True,
+        "providers": {"openai": True, "gemini": True,
                       "groq": True, "mistral": True},
     }
 
@@ -1602,4 +1603,4 @@ After the rollback window
   Retire Railway Node service and delete `server/` only after the Express Transition checklist is complete.
 ```
 
-> **Final Result:** One Python Docker container, one configurable Gunicorn worker by default, and Neo4j stores both the note graph and embeddings. Swagger UI is available at `/docs`; all endpoints are rate-limited. ChromaDB and its persistent application volume are removed. Existing notes must be re-embedded before semantic search returns their historic content.
+> **Final Result:** One Python Docker container, one configurable Gunicorn worker by default, and Neo4j stores both the note graph and embeddings. Swagger UI remains available at `/docs`; all endpoints are rate-limited. ChromaDB, its persistent application volume, and raw Anthropic support are removed. New notes are indexed as they are saved; historic notes are intentionally not re-embedded.

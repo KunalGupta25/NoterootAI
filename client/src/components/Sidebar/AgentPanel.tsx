@@ -11,7 +11,7 @@ import { CodeBlock } from '../Markdown/CodeBlock';
 
 interface AgentMessage {
   role: 'user' | 'assistant' | 'tool';
-  content?: string;
+  content?: string | null;
   tool_call_id?: string;
   tool_name?: string;
   tool_calls?: any[];
@@ -255,6 +255,18 @@ export default function AgentPanel() {
           createdAt: n.createdAt,
           updatedAt: n.updatedAt
         }));
+      } else if (pendingTool.tool === 'search_notes') {
+        const query = String(pendingTool.args.query || '').toLowerCase().trim();
+        const terms = query.split(/\s+/).filter(Boolean);
+        toolRes = noteStore.notes
+          .map((note) => {
+            const searchable = `${note.title} ${note.content.replace(/<[^>]*>/g, ' ')}`.toLowerCase();
+            const score = terms.reduce((total, term) => total + (searchable.includes(term) ? 1 : 0), 0);
+            return { note_id: note._id, title: note.title, score };
+          })
+          .filter((note) => note.score > 0)
+          .sort((a, b) => b.score - a.score)
+          .slice(0, 10);
       } else {
         throw new Error(`Unsupported client tool: ${pendingTool.tool}`);
       }
@@ -279,6 +291,15 @@ export default function AgentPanel() {
     // Add the tool result to the local messages so the user sees it happened
     const updatedMessages: AgentMessage[] = [
       ...messages,
+      {
+        role: 'assistant',
+        content: null,
+        tool_calls: [{
+          id: pendingTool.call_id,
+          type: 'function',
+          function: { name: pendingTool.tool, arguments: JSON.stringify(pendingTool.args) }
+        }]
+      },
       { role: 'tool', tool_call_id: pendingTool.call_id, tool_name: pendingTool.tool, content: JSON.stringify(resultPayload.result || resultPayload.error) }
     ];
     setMessages(updatedMessages);
@@ -299,6 +320,15 @@ export default function AgentPanel() {
     
     const updatedMessages: AgentMessage[] = [
       ...messages,
+      {
+        role: 'assistant',
+        content: null,
+        tool_calls: [{
+          id: pendingTool.call_id,
+          type: 'function',
+          function: { name: pendingTool.tool, arguments: JSON.stringify(pendingTool.args) }
+        }]
+      },
       { role: 'tool', tool_call_id: pendingTool.call_id, tool_name: pendingTool.tool, content: "Action rejected by user." }
     ];
     setMessages(updatedMessages);

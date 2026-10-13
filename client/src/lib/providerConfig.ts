@@ -1,4 +1,4 @@
-export type BuiltinProvider = 'openai' | 'anthropic' | 'gemini' | 'mistral' | 'groq';
+export type BuiltinProvider = 'openai' | 'gemini' | 'mistral' | 'groq';
 export type AIProvider = BuiltinProvider | string; // string covers custom provider IDs
 
 export interface ProviderInfo {
@@ -26,14 +26,6 @@ export const BUILTIN_PROVIDERS: Record<BuiltinProvider, ProviderInfo> = {
     models: ['gemini-3.5-flash', 'gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-pro', 'gemini-1.5-flash'],
     keyPlaceholder: 'AIza...',
     keyUrl: 'https://aistudio.google.com/app/apikey',
-  },
-  anthropic: {
-    label: 'Anthropic Claude',
-    icon: '🔮',
-    color: '#d4a574',
-    models: ['claude-opus-4-5', 'claude-sonnet-4-5', 'claude-3-5-haiku-20241022', 'claude-3-5-sonnet-20241022', 'claude-3-opus-20240229'],
-    keyPlaceholder: 'sk-ant-...',
-    keyUrl: 'https://console.anthropic.com/keys',
   },
   mistral: {
     label: 'Mistral AI',

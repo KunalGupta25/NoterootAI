@@ -1,9 +1,6 @@
 import json
-import uuid
-
 from providers.factory import get_provider
-from schemas.ai import AgentRequest, SearchRequest
-from services.ai_service import search_notes
+from schemas.ai import AgentRequest
 
 TOOLS = [
     {"type": "function", "function": {"name": "create_note", "description": "Create a new note.", "parameters": {"type": "object", "properties": {"title": {"type": "string"}, "content": {"type": "string"}, "tags": {"type": "array", "items": {"type": "string"}}}, "required": ["title"]}}},
@@ -31,19 +28,5 @@ async def run_agent(request: AgentRequest):
             entry["tool_calls"] = message.tool_calls
         messages.append(entry)
     async for event in provider.agent(messages, TOOLS, request.model, request.temperature, request.max_tokens):
-        if event.get("type") != "tool_request" or event.get("tool") != "search_notes":
-            yield f"data: {json.dumps(event)}\n\n"
-            continue
-        args = event.get("args", {})
-        call_id = event.get("call_id") or str(uuid.uuid4())
-        result = await search_notes(SearchRequest(query=args.get("query", ""), provider=request.provider, api_key=request.api_key, custom_base_url=request.custom_base_url))
-        payload = {"results": [{"note_id": item.note_id, "title": item.title, "score": round(item.score, 3)} for item in result.results]}
-        yield f"data: {json.dumps({'type': 'tool_silent', 'tool': 'search_notes', 'result': payload})}\n\n"
-        messages.extend([
-            {"role": "assistant", "content": None, "tool_calls": [{"id": call_id, "type": "function", "function": {"name": "search_notes", "arguments": json.dumps(args)}}]},
-            {"role": "tool", "tool_call_id": call_id, "name": "search_notes", "content": json.dumps(payload)},
-        ])
-        async for follow_up in provider.agent(messages, TOOLS, request.model, request.temperature, request.max_tokens):
-            yield f"data: {json.dumps(follow_up)}\n\n"
-        break
+        yield f"data: {json.dumps(event)}\n\n"
     yield "data: [DONE]\n\n"

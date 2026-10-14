@@ -5,7 +5,7 @@ import { isBuiltinProvider } from '../lib/providerConfig';
 import { AI_URL } from '../lib/constants';
 import {
   Sparkles, Send, Search,
-  Paperclip, Copy, Check, Bot, AlertTriangle, Settings as SettingsIcon
+  Paperclip, Copy, Check, Bot, AlertTriangle, Settings as SettingsIcon, Trash2
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { CodeBlock } from '../components/Markdown/CodeBlock';
@@ -30,6 +30,7 @@ export default function AIChatPage() {
   const { notes } = useNoteStore();
 
   const [scope, setScope] = useState<'global' | 'selected'>('global');
+  const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
   const [messages, setMessages] = useState<LocalMessage[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -71,13 +72,29 @@ export default function AIChatPage() {
     }
     chatStore.addMessage(chatId, { role: 'user', content: userMsg, timestamp: Date.now() });
 
+    const chosenNote = (scope === 'selected' && selectedNoteId)
+      ? notes.find(n => n._id === selectedNoteId)
+      : null;
+
+    let payloadMsgs = newMsgs;
+    if (chosenNote) {
+      const noteClean = (chosenNote.content || '').replace(/<[^>]+>/g, ' ').slice(0, 3000);
+      payloadMsgs = [
+        ...newMsgs.slice(0, -1),
+        {
+          role: 'user',
+          content: `Document Reference ("${chosenNote.title}"):\n"""\n${noteClean}\n"""\n\nQuestion: ${userMsg}`,
+        },
+      ];
+    }
+
     try {
       const { apiKey, customBaseUrl } = getApiInfo();
       const res = await fetch(`${AI_URL}/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          messages: newMsgs,
+          messages: payloadMsgs,
           provider: isBuiltinProvider(activeProvider) ? activeProvider : 'custom',
           model: activeModel,
           api_key: apiKey,
@@ -97,19 +114,24 @@ export default function AIChatPage() {
     } catch {
       // Real vault fallback synthesis
       let fallback = '';
-      const matchingNotes = notes.filter(n =>
-        n.title.toLowerCase().includes(userMsg.toLowerCase()) ||
-        (n.content && n.content.toLowerCase().includes(userMsg.toLowerCase()))
-      );
-
-      if (matchingNotes.length > 0) {
-        const topNote = matchingNotes[0];
-        const cleanSnippet = topNote.content.replace(/<[^>]+>/g, ' ').slice(0, 260);
-        fallback = `Found relevant content in your note **${topNote.title}**:\n\n> "${cleanSnippet.trim()}..."\n\n*Configure an AI API key in Settings for full generative answers.*`;
-      } else if (notes.length > 0) {
-        fallback = `I searched your vault across ${notes.length} note(s). No direct match was found for "${userMsg}". Configure an AI API key in Settings to enable open-ended generation.`;
+      if (chosenNote) {
+        const cleanSnippet = (chosenNote.content || '').replace(/<[^>]+>/g, ' ').slice(0, 300);
+        fallback = `Referenced your note **${chosenNote.title}**:\n\n> "${cleanSnippet.trim() || 'No text content found in note'}..."\n\n*Configure an AI API key in Settings for open generative answers.*`;
       } else {
-        fallback = `Your vault currently has no notes to reference. Create a note or add the Tutorial Guide from the Dashboard!`;
+        const matchingNotes = notes.filter(n =>
+          n.title.toLowerCase().includes(userMsg.toLowerCase()) ||
+          (n.content && n.content.toLowerCase().includes(userMsg.toLowerCase()))
+        );
+
+        if (matchingNotes.length > 0) {
+          const topNote = matchingNotes[0];
+          const cleanSnippet = topNote.content.replace(/<[^>]+>/g, ' ').slice(0, 260);
+          fallback = `Found relevant content in your note **${topNote.title}**:\n\n> "${cleanSnippet.trim()}..."\n\n*Configure an AI API key in Settings for full generative answers.*`;
+        } else if (notes.length > 0) {
+          fallback = `I searched your vault across ${notes.length} note(s). No direct match was found for "${userMsg}". Configure an AI API key in Settings to enable open-ended generation.`;
+        } else {
+          fallback = `Your vault currently has no notes to reference. Create a note or add the Tutorial Guide from the Dashboard!`;
+        }
       }
 
       setMessages([...newMsgs, { role: 'assistant', content: fallback }]);
@@ -188,6 +210,68 @@ export default function AIChatPage() {
                 : 'AI is disabled — no active provider or key configured.'}
             </p>
           </div>
+        </div>
+
+        {/* Top Header Actions (Active Model & Clear Chat) */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+          <Link
+            to="/settings"
+            title="Configure active provider & model in Settings"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '5px 12px',
+              borderRadius: '6px',
+              background: 'var(--surface)',
+              border: '1px solid var(--border)',
+              color: 'var(--fg)',
+              fontSize: '12.5px',
+              fontWeight: 500,
+              textDecoration: 'none',
+              transition: 'border-color 0.12s',
+            }}
+          >
+            <span style={{ color: hasApiKey ? '#22c55e' : '#eab308' }}>●</span>
+            <span style={{ textTransform: 'capitalize' }}>{activeProvider}</span>
+            <span style={{ color: 'var(--muted)', fontSize: '11.5px' }}>({activeModel})</span>
+          </Link>
+
+          {messages.length > 0 && (
+            <button
+              onClick={() => {
+                setMessages([]);
+                setActiveChatId(null);
+              }}
+              title="Clear current conversation"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px',
+                padding: '5px 10px',
+                borderRadius: '6px',
+                background: 'transparent',
+                border: '1px solid var(--border)',
+                color: 'var(--muted)',
+                fontSize: '12px',
+                cursor: 'pointer',
+                transition: 'all 0.12s',
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.color = '#ef4444';
+                e.currentTarget.style.borderColor = '#ef4444';
+                e.currentTarget.style.background = 'rgba(239, 68, 68, 0.08)';
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.color = 'var(--muted)';
+                e.currentTarget.style.borderColor = 'var(--border)';
+                e.currentTarget.style.background = 'transparent';
+              }}
+            >
+              <Trash2 size={13} />
+              <span>Clear</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -277,9 +361,57 @@ export default function AIChatPage() {
             transition: 'all 0.15s',
           }}
         >
-          Selected Folder / File
+          Selected Document
         </button>
       </div>
+
+      {/* ── Document Picker when Selected Document scope is active ── */}
+      {scope === 'selected' && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+            padding: '8px 14px',
+            background: 'var(--surface)',
+            border: '1px solid var(--border)',
+            borderRadius: '8px',
+            marginBottom: '16px',
+            flexShrink: 0,
+          }}
+        >
+          <span style={{ fontSize: '12.5px', color: 'var(--muted)', fontWeight: 500 }}>
+            Chatting with note:
+          </span>
+          <select
+            value={selectedNoteId || ''}
+            onChange={e => setSelectedNoteId(e.target.value || null)}
+            style={{
+              flex: 1,
+              maxWidth: '300px',
+              padding: '5px 10px',
+              background: 'var(--bg)',
+              border: '1px solid var(--border)',
+              borderRadius: '6px',
+              color: 'var(--fg)',
+              fontSize: '12.5px',
+              outline: 'none',
+            }}
+          >
+            <option value="">Select a document...</option>
+            {notes.map(n => (
+              <option key={n._id} value={n._id}>
+                {n.icon || '📄'} {n.title || 'Untitled'}
+              </option>
+            ))}
+          </select>
+          {selectedNoteId && (
+            <span style={{ fontSize: '11.5px', color: '#22c55e', display: 'flex', alignItems: 'center', gap: '3px' }}>
+              <Check size={12} /> Active context
+            </span>
+          )}
+        </div>
+      )}
 
       {/* ── Chat Messages Scroll Area ── */}
       <div

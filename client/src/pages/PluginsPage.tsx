@@ -60,31 +60,31 @@ const MARKET_PLUGINS: PluginCardData[] = [
 ];
 
 export default function PluginsPage() {
-  const { plugins, togglePlugin } = usePluginStore();
+  const { plugins, togglePlugin, installPlugin, removePlugin, installFromUrl } = usePluginStore();
 
   const [activeTab, setActiveTab] = useState<'marketplace' | 'installed' | 'github' | 'upload'>('marketplace');
   const [searchQuery, setSearchQuery] = useState('');
   const [githubUrl, setGithubUrl] = useState('');
-  const [installedMap, setInstalledMap] = useState<Record<string, boolean>>({
-    'pdf-reader': false,
-    'web-clipper': false,
-    'notion-importer': false,
-    'youtube-summarizer': false,
-  });
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [uploadStatus, setUploadStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [isDragOver, setIsDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleToggleInstall = (id: string) => {
-    setInstalledMap(prev => ({
-      ...prev,
-      [id]: !prev[id],
-    }));
+  const handleToggleInstall = async (plugin: PluginCardData) => {
+    if (plugins.some(p => p.id === plugin.id)) {
+      await removePlugin(plugin.id);
+    } else {
+      await installPlugin({
+        id: plugin.id,
+        source: 'community',
+        enabled: true,
+        readme: plugin.description,
+      });
+    }
   };
 
   const handleFileDrop = (file: File) => {
-    const valid = file.name.endsWith('.js') || file.name.endsWith('.zip');
+    const valid = file.name.endsWith('.js') || file.name.endsWith('.zip') || file.name.endsWith('.json');
     if (!valid) {
       setUploadStatus('error');
       setUploadedFile(null);
@@ -94,29 +94,38 @@ export default function PluginsPage() {
     setUploadStatus('idle');
   };
 
-  const handleInstallUpload = () => {
+  const handleInstallUpload = async () => {
     if (!uploadedFile) return;
+    const pluginId = uploadedFile.name.replace(/\.[^/.]+$/, '').toLowerCase().replace(/[^a-z0-9_-]/g, '-');
+    await installPlugin({
+      id: pluginId,
+      source: 'community',
+      enabled: true,
+      readme: `Installed from local file: ${uploadedFile.name}`,
+    });
     setUploadStatus('success');
-    setTimeout(() => { setUploadedFile(null); setUploadStatus('idle'); }, 3000);
+    setTimeout(() => { setUploadedFile(null); setUploadStatus('idle'); }, 2500);
   };
 
   const [githubStatus, setGithubStatus] = useState<'idle' | 'installing' | 'success' | 'error'>('idle');
 
-  const handleGithubInstall = () => {
+  const handleGithubInstall = async () => {
     if (!githubUrl.trim() || !githubUrl.includes('github.com')) {
       setGithubStatus('error');
       return;
     }
     setGithubStatus('installing');
-    setTimeout(() => {
+    try {
+      await installFromUrl(githubUrl.trim());
       setGithubStatus('success');
       setTimeout(() => {
         setGithubUrl('');
         setGithubStatus('idle');
-      }, 3000);
-    }, 1200);
+      }, 2500);
+    } catch {
+      setGithubStatus('error');
+    }
   };
-
 
   const filteredMarket = MARKET_PLUGINS.filter(p =>
     p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -212,7 +221,7 @@ export default function PluginsPage() {
                 textTransform: 'capitalize',
               }}
             >
-              {tab === 'upload' ? '↑ Upload' : tab === 'installed' ? `Installed (${Object.values(installedMap).filter(Boolean).length || 0})` : tab.charAt(0).toUpperCase() + tab.slice(1)}
+              {tab === 'upload' ? '↑ Upload' : tab === 'installed' ? `Installed (${plugins.length})` : tab.charAt(0).toUpperCase() + tab.slice(1)}
             </button>
           ))}
         </div>
@@ -251,7 +260,7 @@ export default function PluginsPage() {
       {activeTab === 'marketplace' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
           {filteredMarket.map(plugin => {
-            const isInstalled = installedMap[plugin.id];
+            const isInstalled = plugins.some(p => p.id === plugin.id);
             return (
               <div
                 key={plugin.id}
@@ -298,7 +307,7 @@ export default function PluginsPage() {
 
                 {/* Action Install Button matching Mockup */}
                 <button
-                  onClick={() => handleToggleInstall(plugin.id)}
+                  onClick={() => handleToggleInstall(plugin)}
                   style={{
                     marginLeft: '16px',
                     padding: '6px 16px',

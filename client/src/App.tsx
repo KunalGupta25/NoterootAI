@@ -97,6 +97,7 @@ function App() {
         <Route path="/auth" element={<AuthPage />} />
         <Route path="/" element={token ? <AppShell /> : <Navigate to="/auth" replace />}>
           <Route index element={<Dashboard />} />
+          <Route path="notes" element={<Dashboard />} />
           <Route path="notes/new" element={<NewNotePage />} />
           <Route path="notes/:id" element={<NoteEditorPage />} />
           <Route path="graph" element={<GraphPage />} />

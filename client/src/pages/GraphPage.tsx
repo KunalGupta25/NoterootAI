@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import cytoscape from 'cytoscape';
 import { useNoteStore } from '../stores/noteStore';
+import { useSettingsStore } from '../stores/settingsStore';
 import { useNavigate } from 'react-router-dom';
 import {
   Network, Search, ZoomIn, ZoomOut, RotateCcw,
@@ -15,6 +16,7 @@ export default function GraphPage() {
   const containerRef = useRef<HTMLDivElement>(null);
   const cyRef = useRef<cytoscape.Core | null>(null);
   const { notes, saveNote } = useNoteStore();
+  const { theme } = useSettingsStore();
   const navigate = useNavigate();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -179,6 +181,11 @@ export default function GraphPage() {
 
     if (nodeElems.length === 0) return;
 
+    const isDark = theme === 'dark' || document.documentElement.getAttribute('data-theme') === 'dark';
+    const textColor = isDark ? '#f4f4f5' : '#18181b';
+    const surfaceColor = isDark ? '#1e1e1e' : '#ffffff';
+    const borderColor = isDark ? '#383838' : '#e4e4e7';
+
     cyRef.current = cytoscape({
       container: containerRef.current,
       elements,
@@ -191,9 +198,9 @@ export default function GraphPage() {
             'width': 18,
             'height': 18,
             'border-width': 2,
-            'border-color': 'var(--surface)',
+            'border-color': surfaceColor,
             'label': 'data(label)',
-            'color': 'var(--fg)',
+            'color': textColor,
             'font-size': '11.5px',
             'font-family': "'Inter', system-ui, -apple-system, sans-serif",
             'font-weight': 600,
@@ -204,11 +211,11 @@ export default function GraphPage() {
             'text-max-width': '120px',
             // Text box halo for crystal clear readability
             'text-background-opacity': 0.88,
-            'text-background-color': 'var(--surface)',
+            'text-background-color': surfaceColor,
             'text-background-padding': '3px',
             'text-background-shape': 'roundrectangle',
             'text-border-width': 1,
-            'text-border-color': 'var(--border)',
+            'text-border-color': borderColor,
             'transition-property': 'opacity, border-color, border-width, background-color',
             'transition-duration': 0.15,
           } as any,
@@ -301,7 +308,7 @@ export default function GraphPage() {
         cyRef.current?.elements().removeClass('highlighted dimmed');
       }
     });
-  }, [buildElements, getLayoutOptions, layoutMode, navigate]);
+  }, [buildElements, getLayoutOptions, layoutMode, navigate, theme]);
 
   useEffect(() => {
     initGraph();

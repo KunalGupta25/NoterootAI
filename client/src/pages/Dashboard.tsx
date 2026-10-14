@@ -1,8 +1,8 @@
-import { useState, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useMemo, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useNoteStore } from '../stores/noteStore';
 import { useAuthStore } from '../stores/authStore';
-import { Plus, MoreVertical, Star, Trash2, Edit3, FileText, BookOpen } from 'lucide-react';
+import { Plus, MoreVertical, Star, Trash2, Edit3, FileText, BookOpen, Search, X, Tag } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { TUTORIAL_NOTE_CONTENT } from '../components/Onboarding/OnboardingModal';
 
@@ -10,9 +10,13 @@ export default function Dashboard() {
   const { notes, saveNote, deleteNote } = useNoteStore();
   const { user } = useAuthStore();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tagParam = searchParams.get('tag');
 
-  const [activeTab, setActiveTab] = useState<'Recent' | 'Starred' | 'Shared'>('Recent');
+  const [activeTab, setActiveTab] = useState<'Recent' | 'Starred' | 'All'>('Recent');
+  const [searchQuery, setSearchQuery] = useState('');
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
+
   const [starredIds, setStarredIds] = useState<string[]>(() => {
     try {
       return JSON.parse(localStorage.getItem('noteroot_starred_ids') || '[]');
@@ -20,6 +24,25 @@ export default function Dashboard() {
       return [];
     }
   });
+
+  // Close 3-dots menu on outside click or escape
+  useEffect(() => {
+    const handleOutsideClick = () => {
+      if (menuOpenId) {
+        setMenuOpenId(null);
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMenuOpenId(null);
+    };
+
+    document.addEventListener('click', handleOutsideClick);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('click', handleOutsideClick);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [menuOpenId]);
 
   const toggleStar = (id: string) => {
     setStarredIds(prev => {
@@ -43,7 +66,7 @@ export default function Dashboard() {
       title: 'Untitled Note',
       parentId: null,
       icon: '📄',
-      tags: [],
+      tags: tagParam ? [tagParam] : [],
     });
     navigate(`/notes/${id}`);
   };
@@ -87,6 +110,8 @@ export default function Dashboard() {
       return {
         id: n._id,
         title: n.title || 'Untitled',
+        content: n.content || '',
+        tags: n.tags || [],
         iconBg: color.bg,
         iconColor: color.fg,
         editedTime,
@@ -97,14 +122,28 @@ export default function Dashboard() {
   }, [notes, starredIds]);
 
   const filteredList = useMemo(() => {
+    let list = displayList;
+
+    // Filter by tag if specified in query
+    if (tagParam) {
+      list = list.filter(n => n.tags.includes(tagParam));
+    }
+
+    // Filter by search query
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      list = list.filter(n =>
+        n.title.toLowerCase().includes(q) ||
+        n.content.toLowerCase().includes(q) ||
+        n.tags.some(t => t.toLowerCase().includes(q))
+      );
+    }
+
     if (activeTab === 'Starred') {
-      return displayList.filter(n => n.isStarred);
+      return list.filter(n => n.isStarred);
     }
-    if (activeTab === 'Shared') {
-      return [];
-    }
-    return displayList;
-  }, [displayList, activeTab]);
+    return list;
+  }, [displayList, activeTab, tagParam, searchQuery]);
 
   return (
     <div
@@ -173,57 +212,141 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* ── Tabs (Recent, Starred, Shared with me) ── */}
+      {/* ── Active Tag Filter Banner ── */}
+      {tagParam && (
+        <div
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '6px 12px',
+            borderRadius: '6px',
+            background: 'rgba(224, 84, 56, 0.12)',
+            border: '1px solid rgba(224, 84, 56, 0.25)',
+            color: '#e05438',
+            fontSize: '12.5px',
+            fontWeight: 500,
+            marginBottom: '16px',
+          }}
+        >
+          <Tag size={13} />
+          <span>Filtered by tag: <strong>#{tagParam}</strong></span>
+          <button
+            onClick={() => {
+              searchParams.delete('tag');
+              setSearchParams(searchParams);
+            }}
+            title="Clear tag filter"
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: '#e05438',
+              cursor: 'pointer',
+              padding: '2px',
+              display: 'flex',
+              alignItems: 'center',
+              borderRadius: '3px',
+            }}
+          >
+            <X size={13} />
+          </button>
+        </div>
+      )}
+
+      {/* ── Tabs & Search Bar Row ── */}
       <div
         style={{
           display: 'flex',
-          gap: '24px',
+          alignItems: 'center',
+          justifyContent: 'space-between',
           borderBottom: '1px solid var(--border)',
           marginBottom: '20px',
+          gap: '16px',
         }}
       >
-        {(['Recent', 'Starred', 'Shared with me'] as const).map(tab => {
-          const tabKey = tab === 'Shared with me' ? 'Shared' : tab;
-          const isActive = activeTab === tabKey;
-          return (
+        <div style={{ display: 'flex', gap: '24px' }}>
+          {(['Recent', 'Starred', 'All'] as const).map(tab => {
+            const label = tab === 'All' ? 'All Notes' : tab;
+            const isActive = activeTab === tab;
+            return (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  padding: '10px 0',
+                  fontSize: '13.5px',
+                  fontWeight: isActive ? 600 : 500,
+                  color: isActive ? '#e05438' : 'var(--muted)',
+                  cursor: 'pointer',
+                  position: 'relative',
+                  transition: 'color 0.15s',
+                }}
+                onMouseEnter={e => {
+                  if (!isActive) e.currentTarget.style.color = 'var(--fg)';
+                }}
+                onMouseLeave={e => {
+                  if (!isActive) e.currentTarget.style.color = 'var(--muted)';
+                }}
+              >
+                {label}
+                {isActive && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      bottom: '-1px',
+                      left: 0,
+                      right: 0,
+                      height: '2px',
+                      background: '#e05438',
+                      borderRadius: '2px',
+                    }}
+                  />
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Real-time search box */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '5px 10px',
+            background: 'var(--surface)',
+            border: '1px solid var(--border)',
+            borderRadius: '6px',
+            width: '200px',
+            marginBottom: '6px',
+          }}
+        >
+          <Search size={14} style={{ color: 'var(--muted)', flexShrink: 0 }} />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            placeholder="Search notes..."
+            style={{
+              border: 'none',
+              outline: 'none',
+              background: 'transparent',
+              color: 'var(--fg)',
+              fontSize: '12.5px',
+              width: '100%',
+            }}
+          />
+          {searchQuery && (
             <button
-              key={tab}
-              onClick={() => setActiveTab(tabKey)}
-              style={{
-                background: 'transparent',
-                border: 'none',
-                padding: '10px 0',
-                fontSize: '13.5px',
-                fontWeight: isActive ? 600 : 500,
-                color: isActive ? '#e05438' : 'var(--muted)',
-                cursor: 'pointer',
-                position: 'relative',
-                transition: 'color 0.15s',
-              }}
-              onMouseEnter={e => {
-                if (!isActive) e.currentTarget.style.color = 'var(--fg)';
-              }}
-              onMouseLeave={e => {
-                if (!isActive) e.currentTarget.style.color = 'var(--muted)';
-              }}
+              onClick={() => setSearchQuery('')}
+              style={{ background: 'transparent', border: 'none', color: 'var(--muted)', cursor: 'pointer', padding: 0 }}
             >
-              {tab}
-              {isActive && (
-                <div
-                  style={{
-                    position: 'absolute',
-                    bottom: '-1px',
-                    left: 0,
-                    right: 0,
-                    height: '2px',
-                    background: '#e05438',
-                    borderRadius: '2px',
-                  }}
-                />
-              )}
+              <X size={12} />
             </button>
-          );
-        })}
+          )}
+        </div>
       </div>
 
       {/* ── Note Rows or Empty State ── */}
@@ -258,15 +381,25 @@ export default function Dashboard() {
           </div>
           <div>
             <h3 style={{ fontSize: '16px', fontWeight: 600, margin: '0 0 4px', color: 'var(--fg)' }}>
-              {activeTab === 'Starred' ? 'No starred notes yet' : activeTab === 'Shared' ? 'No shared notes' : 'Your vault is ready'}
+              {searchQuery
+                ? `No notes matching "${searchQuery}"`
+                : tagParam
+                ? `No notes tagged with #${tagParam}`
+                : activeTab === 'Starred'
+                ? 'No starred notes yet'
+                : 'Your vault is ready'}
             </h3>
             <p style={{ fontSize: '13px', color: 'var(--muted)', margin: 0, maxWidth: '400px' }}>
-              {activeTab === 'Starred'
+              {searchQuery
+                ? 'Try a different search term or clear the filter.'
+                : tagParam
+                ? 'Add this tag to a note from the editor.'
+                : activeTab === 'Starred'
                 ? 'Star any note to find it quickly here.'
                 : 'Get started by creating your first page or explore our interactive tutorial.'}
             </p>
           </div>
-          {activeTab === 'Recent' && (
+          {activeTab !== 'Starred' && !searchQuery && !tagParam && (
             <div style={{ display: 'flex', gap: '10px', marginTop: '6px' }}>
               <button
                 onClick={handleCreateTutorial}

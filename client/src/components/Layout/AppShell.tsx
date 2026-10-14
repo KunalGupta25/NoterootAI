@@ -1,6 +1,6 @@
 import { Link, useLocation, Outlet } from 'react-router-dom';
 import {
-  Home, Search, Inbox, FileText, Network, Bot,
+  Home, Search, FileText, Network, Bot,
   Puzzle, Settings, Sun, Moon,
   PanelLeftClose, PanelLeft, HelpCircle, Plus
 } from 'lucide-react';
@@ -65,14 +65,14 @@ export default function AppShell() {
   }, []);
 
   const isActive = (path: string) => {
-    if (path === '/') return location.pathname === '/';
+    if (path === '/') return location.pathname === '/' && !location.search;
+    if (path === '/notes') return location.pathname === '/notes' || (location.pathname === '/' && location.search.includes('tag='));
     return location.pathname.startsWith(path);
   };
 
   const navItems = [
     { label: 'Home', path: '/', icon: <Home size={18} /> },
     { label: 'Search', path: '#search', icon: <Search size={18} />, isAction: () => setPaletteOpen(true) },
-    { label: 'Inbox', path: '/#inbox', icon: <Inbox size={18} /> },
     { label: 'All Notes', path: '/notes', icon: <FileText size={18} /> },
     { label: 'Graph View', path: '/graph', icon: <Network size={18} /> },
     { label: 'AI Chat', path: '/chat', icon: <Bot size={18} /> },

@@ -27,6 +27,26 @@ export default function NoteEditorPage() {
   const [editorInstance, setEditorInstance] = useState<any>(null);
   const [copiedShare, setCopiedShare] = useState(false);
   const [showInfoModal, setShowInfoModal] = useState(false);
+  const infoModalRef = useRef<HTMLDivElement>(null);
+
+  // Tag manager state
+  const [newTagInput, setNewTagInput] = useState('');
+  const [isAddingTag, setIsAddingTag] = useState(false);
+
+  // Close info modal on click outside
+  useEffect(() => {
+    const handleOutsideClick = (e: MouseEvent) => {
+      if (infoModalRef.current && !infoModalRef.current.contains(e.target as Node)) {
+        setShowInfoModal(false);
+      }
+    };
+    if (showInfoModal) {
+      document.addEventListener('mousedown', handleOutsideClick);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick);
+    };
+  }, [showInfoModal]);
 
   // AI Assistant chat state
   const [aiPrompt, setAiPrompt] = useState('');
@@ -94,6 +114,26 @@ export default function NoteEditorPage() {
     contentRef.current = html;
     triggerSave(undefined, html);
   }, [triggerSave]);
+
+  const handleAddTag = (rawTag: string) => {
+    const clean = rawTag.trim().replace(/^#/, '');
+    if (!clean || tags.includes(clean)) {
+      setNewTagInput('');
+      setIsAddingTag(false);
+      return;
+    }
+    const nextTags = [...tags, clean];
+    setTags(nextTags);
+    setNewTagInput('');
+    setIsAddingTag(false);
+    triggerSave(undefined, undefined, nextTags);
+  };
+
+  const handleRemoveTag = (tagToRemove: string) => {
+    const nextTags = tags.filter(t => t !== tagToRemove);
+    setTags(nextTags);
+    triggerSave(undefined, undefined, nextTags);
+  };
 
   // AI Assistant action handlers
   const handleAiAction = async (actionLabel: string, promptInstruction: string) => {
@@ -299,6 +339,7 @@ export default function NoteEditorPage() {
 
               {showInfoModal && (
                 <div
+                  ref={infoModalRef}
                   style={{
                     position: 'absolute',
                     top: '100%',
@@ -398,11 +439,123 @@ export default function NoteEditorPage() {
               background: 'transparent',
               color: 'var(--fg)',
               width: '100%',
-              marginBottom: '16px',
+              marginBottom: '10px',
               letterSpacing: '-0.4px',
               padding: 0,
             }}
           />
+
+          {/* Tags Chips Bar */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              flexWrap: 'wrap',
+              marginBottom: '20px',
+            }}
+          >
+            {tags.map(t => (
+              <span
+                key={t}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  padding: '3px 8px',
+                  borderRadius: '12px',
+                  background: 'rgba(224, 84, 56, 0.1)',
+                  color: '#e05438',
+                  fontSize: '12px',
+                  fontWeight: 500,
+                }}
+              >
+                <span>#{t}</span>
+                <button
+                  onClick={() => handleRemoveTag(t)}
+                  title={`Remove #${t}`}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: '#e05438',
+                    cursor: 'pointer',
+                    padding: 0,
+                    display: 'flex',
+                    alignItems: 'center',
+                  }}
+                >
+                  <X size={11} />
+                </button>
+              </span>
+            ))}
+
+            {isAddingTag ? (
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                <input
+                  type="text"
+                  value={newTagInput}
+                  onChange={e => setNewTagInput(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' || e.key === ',') {
+                      e.preventDefault();
+                      handleAddTag(newTagInput);
+                    }
+                    if (e.key === 'Escape') {
+                      setIsAddingTag(false);
+                      setNewTagInput('');
+                    }
+                  }}
+                  onBlur={() => {
+                    if (newTagInput.trim()) {
+                      handleAddTag(newTagInput);
+                    } else {
+                      setIsAddingTag(false);
+                    }
+                  }}
+                  placeholder="tag name..."
+                  autoFocus
+                  style={{
+                    padding: '2px 8px',
+                    fontSize: '12px',
+                    borderRadius: '12px',
+                    border: '1px solid var(--border)',
+                    background: 'var(--surface)',
+                    color: 'var(--fg)',
+                    outline: 'none',
+                    width: '100px',
+                  }}
+                />
+              </div>
+            ) : (
+              <button
+                onClick={() => setIsAddingTag(true)}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  padding: '3px 8px',
+                  borderRadius: '12px',
+                  background: 'transparent',
+                  border: '1px dashed var(--border)',
+                  color: 'var(--muted)',
+                  fontSize: '11.5px',
+                  cursor: 'pointer',
+                  transition: 'color 0.12s, border-color 0.12s',
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.color = '#e05438';
+                  e.currentTarget.style.borderColor = '#e05438';
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.color = 'var(--muted)';
+                  e.currentTarget.style.borderColor = 'var(--border)';
+                }}
+              >
+                <Plus size={11} />
+                <span>Add tag</span>
+              </button>
+            )}
+          </div>
 
           {/* Formatting Toolbar */}
           <div

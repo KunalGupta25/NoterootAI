@@ -1,26 +1,25 @@
 import { useState } from 'react';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useAuthStore } from '../stores/authStore';
+import { useNoteStore } from '../stores/noteStore';
 import { BUILTIN_PROVIDERS, BUILTIN_PROVIDER_IDS } from '../lib/providerConfig';
 import {
-  User, Edit3, Bot, Cloud, Plug, Puzzle, Bell,
-  Palette, Shield, Check, Plus, Trash2, ExternalLink, Server
+  User, Edit3, Bot, Cloud, Puzzle,
+  Palette, Check, Plus, Trash2, ExternalLink, Server, Download
 } from 'lucide-react';
 import { PluginSettingsPanels } from '../plugins/slots/PluginSettingsPanels';
 
 type SettingsTab =
   | 'general'
-  | 'editor'
-  | 'ai'
-  | 'sync'
-  | 'integrations'
-  | 'plugins'
-  | 'notifications'
   | 'appearance'
-  | 'privacy';
+  | 'ai'
+  | 'editor'
+  | 'storage'
+  | 'plugins';
 
 export default function SettingsPage() {
   const { user } = useAuthStore();
+  const { notes, syncStatus } = useNoteStore();
   const {
     theme, setTheme,
     providerKeys, setProviderKey,
@@ -37,6 +36,10 @@ export default function SettingsPage() {
   const [bio, setBio] = useState('Full Stack Developer. Building NoteRoot AI.');
   const [language, setLanguage] = useState('English (India)');
   const [savedSuccess, setSavedSuccess] = useState(false);
+
+  // Form states for Editor tab
+  const [spellCheck, setSpellCheck] = useState(true);
+  const [editorFontSize, setEditorFontSize] = useState<'normal' | 'compact' | 'spacious'>('normal');
 
   // Form states for Custom AI Provider
   const [showAddCustom, setShowAddCustom] = useState(false);
@@ -70,16 +73,23 @@ export default function SettingsPage() {
     setTimeout(() => setSavedSuccess(false), 2500);
   };
 
+  const handleExportVault = () => {
+    const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(notes, null, 2));
+    const downloadAnchor = document.createElement('a');
+    downloadAnchor.setAttribute('href', dataStr);
+    downloadAnchor.setAttribute('download', `noteroot-vault-backup-${new Date().toISOString().slice(0, 10)}.json`);
+    document.body.appendChild(downloadAnchor);
+    downloadAnchor.click();
+    downloadAnchor.remove();
+  };
+
   const menuItems: Array<{ id: SettingsTab; label: string; icon: React.ReactNode }> = [
     { id: 'general', label: 'General', icon: <User size={15} /> },
-    { id: 'editor', label: 'Editor', icon: <Edit3 size={15} /> },
-    { id: 'ai', label: 'AI & Models', icon: <Bot size={15} /> },
-    { id: 'sync', label: 'Sync & Storage', icon: <Cloud size={15} /> },
-    { id: 'integrations', label: 'Integrations', icon: <Plug size={15} /> },
-    { id: 'plugins', label: 'Plugins', icon: <Puzzle size={15} /> },
-    { id: 'notifications', label: 'Notifications', icon: <Bell size={15} /> },
     { id: 'appearance', label: 'Appearance', icon: <Palette size={15} /> },
-    { id: 'privacy', label: 'Privacy & Security', icon: <Shield size={15} /> },
+    { id: 'ai', label: 'AI & Models', icon: <Bot size={15} /> },
+    { id: 'editor', label: 'Editor', icon: <Edit3 size={15} /> },
+    { id: 'storage', label: 'Vault & Storage', icon: <Cloud size={15} /> },
+    { id: 'plugins', label: 'Plugins', icon: <Puzzle size={15} /> },
   ];
 
   return (
@@ -727,27 +737,139 @@ export default function SettingsPage() {
             </div>
           )}
 
-          {/* ── OTHER TABS ── */}
-          {['editor', 'sync', 'integrations', 'notifications', 'privacy'].includes(activeTab) && (
+          {/* ── EDITOR TAB ── */}
+          {activeTab === 'editor' && (
             <div>
-              <h2 style={{ fontSize: '16px', fontWeight: 600, margin: '0 0 16px 0', color: 'var(--fg)', textTransform: 'capitalize' }}>
-                {activeTab}
+              <h2 style={{ fontSize: '16px', fontWeight: 600, margin: '0 0 6px 0', color: 'var(--fg)' }}>
+                Editor Preferences
               </h2>
-              <p style={{ fontSize: '13px', color: 'var(--muted)' }}>
-                Settings for {activeTab} are actively synced with your workspace profile.
+              <p style={{ fontSize: '13px', color: 'var(--muted)', marginBottom: '24px' }}>
+                Configure typing experience, auto-formatting, and view keyboard shortcuts.
               </p>
-              <div
-                style={{
-                  background: 'var(--surface)',
-                  border: '1px solid var(--border)',
-                  borderRadius: '8px',
-                  padding: '20px',
-                  marginTop: '16px',
-                  fontSize: '13px',
-                  color: 'var(--fg)',
-                }}
-              >
-                All options in this section are currently configured to default best practices.
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '8px', padding: '18px 20px' }}>
+                  <div style={{ fontSize: '13.5px', fontWeight: 600, color: 'var(--fg)', marginBottom: '12px' }}>
+                    Typing & Layout
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: '14px', borderBottom: '1px solid var(--border)' }}>
+                    <div>
+                      <div style={{ fontSize: '13px', color: 'var(--fg)', fontWeight: 500 }}>Browser Spellcheck</div>
+                      <div style={{ fontSize: '12px', color: 'var(--muted)' }}>Underline misspelled words as you write</div>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={spellCheck}
+                      onChange={e => setSpellCheck(e.target.checked)}
+                      style={{ cursor: 'pointer', width: '16px', height: '16px', accentColor: '#e05438' }}
+                    />
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: '14px' }}>
+                    <div>
+                      <div style={{ fontSize: '13px', color: 'var(--fg)', fontWeight: 500 }}>Line Spacing</div>
+                      <div style={{ fontSize: '12px', color: 'var(--muted)' }}>Adjust editor paragraph density</div>
+                    </div>
+                    <select
+                      value={editorFontSize}
+                      onChange={e => setEditorFontSize(e.target.value as any)}
+                      style={{ ...inputStyle, width: '130px', padding: '5px 10px', fontSize: '12.5px' }}
+                    >
+                      <option value="compact">Compact</option>
+                      <option value="normal">Normal</option>
+                      <option value="spacious">Spacious</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Keyboard Shortcuts Reference */}
+                <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '8px', padding: '18px 20px' }}>
+                  <div style={{ fontSize: '13.5px', fontWeight: 600, color: 'var(--fg)', marginBottom: '12px' }}>
+                    Keyboard Shortcuts Cheat Sheet
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', fontSize: '12.5px' }}>
+                    {[
+                      { key: 'Ctrl + K', desc: 'Command Palette / Quick Search' },
+                      { key: 'Ctrl + B', desc: 'Bold text' },
+                      { key: 'Ctrl + I', desc: 'Italic text' },
+                      { key: 'Ctrl + U', desc: 'Underline text' },
+                      { key: 'Ctrl + Shift + S', desc: 'Strikethrough text' },
+                      { key: 'Ctrl + E', desc: 'Inline code block' },
+                      { key: '/', desc: 'Open slash commands menu' },
+                      { key: '@', desc: 'Link / Mention another note' },
+                    ].map(s => (
+                      <div key={s.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', background: 'var(--bg)', borderRadius: '5px', border: '1px solid var(--border)' }}>
+                        <span style={{ color: 'var(--muted)' }}>{s.desc}</span>
+                        <kbd style={{ padding: '2px 6px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '4px', fontSize: '11px', fontWeight: 600, color: 'var(--fg)' }}>
+                          {s.key}
+                        </kbd>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── VAULT & STORAGE TAB ── */}
+          {activeTab === 'storage' && (
+            <div>
+              <h2 style={{ fontSize: '16px', fontWeight: 600, margin: '0 0 6px 0', color: 'var(--fg)' }}>
+                Vault & Storage
+              </h2>
+              <p style={{ fontSize: '13px', color: 'var(--muted)', marginBottom: '24px' }}>
+                NoteRoot AI is local-first. Your notes are stored securely on your device with optional encrypted cloud backup.
+              </p>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '8px', padding: '18px 20px' }}>
+                  <div style={{ fontSize: '13.5px', fontWeight: 600, color: 'var(--fg)', marginBottom: '14px' }}>
+                    Vault Status & Statistics
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', marginBottom: '18px' }}>
+                    <div style={{ padding: '12px', background: 'var(--bg)', borderRadius: '6px', border: '1px solid var(--border)' }}>
+                      <div style={{ fontSize: '11.5px', color: 'var(--muted)' }}>Total Notes</div>
+                      <div style={{ fontSize: '20px', fontWeight: 700, color: 'var(--fg)', marginTop: '2px' }}>{notes.length}</div>
+                    </div>
+                    <div style={{ padding: '12px', background: 'var(--bg)', borderRadius: '6px', border: '1px solid var(--border)' }}>
+                      <div style={{ fontSize: '11.5px', color: 'var(--muted)' }}>Storage Engine</div>
+                      <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--fg)', marginTop: '4px' }}>IndexedDB</div>
+                    </div>
+                    <div style={{ padding: '12px', background: 'var(--bg)', borderRadius: '6px', border: '1px solid var(--border)' }}>
+                      <div style={{ fontSize: '11.5px', color: 'var(--muted)' }}>Sync Health</div>
+                      <div style={{ fontSize: '14px', fontWeight: 600, color: '#22c55e', marginTop: '4px', textTransform: 'capitalize' }}>
+                        {syncStatus.replace(/_/g, ' ')}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: '14px', borderTop: '1px solid var(--border)' }}>
+                    <div>
+                      <div style={{ fontSize: '13px', color: 'var(--fg)', fontWeight: 500 }}>Export Vault Data</div>
+                      <div style={{ fontSize: '12px', color: 'var(--muted)' }}>Download all your notes and tags as a single JSON backup file</div>
+                    </div>
+                    <button
+                      onClick={handleExportVault}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        padding: '7px 14px',
+                        borderRadius: '6px',
+                        background: '#e05438',
+                        color: '#ffffff',
+                        border: 'none',
+                        fontSize: '12.5px',
+                        fontWeight: 500,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <Download size={14} /> Export Vault
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           )}

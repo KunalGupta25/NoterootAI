@@ -20,19 +20,27 @@ export function NotePageActionsBar({ noteId }: Props) {
           style={{
             display: 'flex',
             alignItems: 'center',
-            gap: '6px',
+            gap: '5px',
             fontSize: '12px',
-            padding: '6px 12px',
-            background: 'var(--surface)',
+            fontWeight: 500,
+            padding: '5px 10px',
+            background: 'var(--surface-2)',
             border: '1px solid var(--border)',
             borderRadius: '6px',
             cursor: 'pointer',
-            color: 'var(--muted)'
+            color: 'var(--muted)',
+            transition: 'all 0.15s ease'
           }}
-          onMouseEnter={e => e.currentTarget.style.color = 'var(--fg)'}
-          onMouseLeave={e => e.currentTarget.style.color = 'var(--muted)'}
+          onMouseEnter={e => {
+            e.currentTarget.style.color = 'var(--fg)';
+            e.currentTarget.style.borderColor = 'var(--fg-2)';
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.color = 'var(--muted)';
+            e.currentTarget.style.borderColor = 'var(--border)';
+          }}
         >
-          <span>{action.icon}</span>
+          <span style={{ fontSize: '13px' }}>{action.icon}</span>
           <span>{action.label}</span>
         </button>
       ))}

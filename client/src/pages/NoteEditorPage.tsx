@@ -12,6 +12,7 @@ import {
 import { useSettingsStore } from '../stores/settingsStore';
 import { isBuiltinProvider } from '../lib/providerConfig';
 import { AI_URL } from '../lib/constants';
+import { NotePageActionsBar } from '../plugins/slots/NotePageActionsBar';
 
 export default function NoteEditorPage() {
   const { id } = useParams();
@@ -147,6 +148,7 @@ export default function NoteEditorPage() {
           setSpace('Other');
         }
         setIsLoaded(true);
+        window.dispatchEvent(new CustomEvent('NOTEROOT_NOTE_OPENED', { detail: { noteId: id } }));
       });
     } else {
       setTitle('Untitled');
@@ -601,6 +603,7 @@ export default function NoteEditorPage() {
                 </div>
               )}
             </div>
+            {id && id !== 'new' && <NotePageActionsBar noteId={id} />}
             <button
               onClick={() => setShowAiAssistant(!showAiAssistant)}
               title="Toggle AI Assistant"

@@ -333,59 +333,111 @@ export default function PluginsPage() {
 
       {/* ── Installed Tab ── */}
       {activeTab === 'installed' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          {plugins.map(p => (
-            <div
-              key={p.id}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                padding: '14px 18px',
-                background: 'var(--surface)',
-                border: '1px solid var(--border)',
-                borderRadius: '8px',
-              }}
-            >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          {plugins.map(p => {
+            const builtinInfo = {
+              'core-markdown-importer': {
+                name: 'Markdown Importer',
+                description: 'Import single .md files directly into workspace Spaces with YAML frontmatter detection.',
+                category: 'Import',
+                icon: '📝',
+              },
+              'core-zip-importer': {
+                name: 'Bulk ZIP Importer',
+                description: 'Extract and import nested folders of markdown files into designated Spaces from .zip archives.',
+                category: 'Import',
+                icon: '📦',
+              },
+              'core-tab-manager': {
+                name: 'Multi-Tab Workspace Manager',
+                description: 'Keep multiple notes open across Spaces with active header tabs and session persistence.',
+                category: 'Workspace',
+                icon: '📑',
+              },
+              'core-note-downloader': {
+                name: 'Note Downloader & Exporter',
+                description: 'Export notes as Markdown with frontmatter or standalone formatted HTML with Space & tag badges.',
+                category: 'Export',
+                icon: '⬇️',
+              },
+            }[p.id];
+
+            const displayName = builtinInfo?.name || p.id.replace('core-', '').replace(/-/g, ' ');
+            const description = builtinInfo?.description || (p.readme ? p.readme.slice(0, 100) : 'Custom plugin');
+
+            return (
               <div
+                key={p.id}
                 style={{
-                  width: '36px',
-                  height: '36px',
-                  borderRadius: '8px',
-                  background: 'rgba(224, 84, 56, 0.1)',
-                  color: '#e05438',
                   display: 'flex',
                   alignItems: 'center',
-                  justifyContent: 'center',
-                  marginRight: '14px',
-                  flexShrink: 0,
-                }}
-              >
-                <Puzzle size={18} />
-              </div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--fg)', textTransform: 'capitalize' }}>
-                  {p.id.replace('core-', '').replace(/-/g, ' ')}
-                </div>
-                <div style={{ fontSize: '12px', color: 'var(--muted)' }}>
-                  Source: {p.source}
-                </div>
-              </div>
-              <button
-                onClick={() => togglePlugin(p.id, !p.enabled)}
-                style={{
-                  padding: '5px 12px',
-                  borderRadius: '4px',
+                  padding: '16px 20px',
+                  background: 'var(--surface)',
                   border: '1px solid var(--border)',
-                  background: p.enabled ? '#22c55e' : 'var(--surface-2)',
-                  color: p.enabled ? '#ffffff' : 'var(--muted)',
-                  fontSize: '12px',
-                  cursor: 'pointer',
+                  borderRadius: '10px',
+                  gap: '14px',
                 }}
               >
-                {p.enabled ? 'Enabled' : 'Disabled'}
-              </button>
-            </div>
-          ))}
+                <div
+                  style={{
+                    width: '40px',
+                    height: '40px',
+                    borderRadius: '8px',
+                    background: 'rgba(224, 84, 56, 0.1)',
+                    color: '#e05438',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '18px',
+                    flexShrink: 0,
+                  }}
+                >
+                  {builtinInfo ? builtinInfo.icon : <Puzzle size={20} />}
+                </div>
+
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '14px', fontWeight: 600, color: 'var(--fg)', textTransform: builtinInfo ? 'none' : 'capitalize' }}>
+                      {displayName}
+                    </span>
+                    <span
+                      style={{
+                        fontSize: '11px',
+                        padding: '1px 7px',
+                        borderRadius: '10px',
+                        background: p.source === 'builtin' ? 'rgba(59, 130, 246, 0.12)' : 'rgba(168, 85, 247, 0.12)',
+                        color: p.source === 'builtin' ? '#3b82f6' : '#a855f7',
+                        fontWeight: 500,
+                      }}
+                    >
+                      {p.source === 'builtin' ? (builtinInfo?.category ? `Built-in • ${builtinInfo.category}` : 'Built-in') : 'Community'}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: '12.5px', color: 'var(--fg-2)', marginTop: '3px', lineHeight: 1.4 }}>
+                    {description}
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => togglePlugin(p.id, !p.enabled)}
+                  style={{
+                    padding: '6px 14px',
+                    borderRadius: '6px',
+                    border: '1px solid var(--border)',
+                    background: p.enabled ? '#22c55e' : 'var(--surface-2)',
+                    color: p.enabled ? '#ffffff' : 'var(--muted)',
+                    fontSize: '12px',
+                    fontWeight: 500,
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease',
+                    flexShrink: 0,
+                  }}
+                >
+                  {p.enabled ? 'Enabled' : 'Disabled'}
+                </button>
+              </div>
+            );
+          })}
         </div>
       )}
 

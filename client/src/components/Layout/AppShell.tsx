@@ -12,6 +12,7 @@ import CommandPalette from '../CommandPalette/CommandPalette';
 import OnboardingModal from '../Onboarding/OnboardingModal';
 import { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { PluginTabBar } from '../../plugins/slots/PluginTabBar';
 
 export default function AppShell() {
   const { initDB, notes, saveNote } = useNoteStore();
@@ -810,6 +811,7 @@ export default function AppShell() {
           background: 'var(--bg)',
         }}
       >
+        <PluginTabBar />
         <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', minWidth: 0 }}>
           <Outlet />
         </div>

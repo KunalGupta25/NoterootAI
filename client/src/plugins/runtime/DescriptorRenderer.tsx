@@ -129,8 +129,14 @@ export function DescriptorRenderer({ node }: Props): React.ReactElement | null {
     case 'TabBar':
       return (
         <div style={{
-          display: 'flex', gap: '4px', overflowX: 'auto', padding: '8px 8px 0 8px',
-          background: 'var(--surface)', borderBottom: '1px solid var(--border)'
+          display: 'flex',
+          gap: '4px',
+          overflowX: 'auto',
+          padding: '6px 16px 0 16px',
+          background: 'var(--surface)',
+          borderBottom: '1px solid var(--border)',
+          alignItems: 'flex-end',
+          scrollbarWidth: 'none'
         }}>
           {node.children.map((child, i) => <DescriptorRenderer key={i} node={child} />)}
         </div>
@@ -139,28 +145,47 @@ export function DescriptorRenderer({ node }: Props): React.ReactElement | null {
       return (
         <div
           onClick={node.onClick}
+          title={node.label}
           style={{
-            display: 'flex', alignItems: 'center', gap: '8px',
-            padding: '8px 14px', fontSize: '13px', fontWeight: node.active ? 600 : 500,
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '5px 12px',
+            fontSize: '12px',
+            fontWeight: node.active ? 600 : 450,
             color: node.active ? 'var(--fg)' : 'var(--muted)',
             background: node.active ? 'var(--bg)' : 'transparent',
             border: '1px solid var(--border)',
             borderBottom: node.active ? '1px solid var(--bg)' : '1px solid var(--border)',
-            borderRadius: '8px 8px 0 0',
+            borderRadius: '6px 6px 0 0',
             cursor: 'pointer',
             marginBottom: '-1px',
-            transition: 'background 0.15s, color 0.15s'
+            transition: 'all 0.15s ease',
+            maxWidth: '220px',
+            userSelect: 'none',
           }}
         >
-          {node.label}
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {node.label}
+          </span>
           {node.onClose && (
             <button
               onClick={(e) => { e.stopPropagation(); node.onClose!(); }}
+              title="Close tab"
               style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                background: 'none', border: 'none', padding: '0 2px',
-                color: 'inherit', opacity: 0.6, cursor: 'pointer',
-                borderRadius: '50%', fontSize: '14px', lineHeight: 1
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                background: 'none',
+                border: 'none',
+                padding: '0 2px',
+                color: 'inherit',
+                opacity: 0.6,
+                cursor: 'pointer',
+                borderRadius: '4px',
+                fontSize: '13px',
+                lineHeight: 1,
+                marginLeft: '2px',
               }}
               onMouseEnter={e => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.background = 'var(--border)'; }}
               onMouseLeave={e => { e.currentTarget.style.opacity = '0.6'; e.currentTarget.style.background = 'none'; }}

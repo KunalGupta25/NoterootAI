@@ -26,10 +26,15 @@ export class PluginContext {
 
   // Notes API
   public notes = {
-    createNote: async (title: string, markdown: string) => {
+    createNote: async (title: string, markdown: string, space: string = 'Other', tags: string[] = []) => {
       const { marked } = await import('marked');
       const html = markdown ? await marked.parse(markdown) : '';
-      return await useNoteStore.getState().saveNote({ title, content: html });
+      return await useNoteStore.getState().saveNote({
+        title,
+        content: html,
+        space: space || 'Other',
+        tags: tags || []
+      });
     },
     updateNote: async (id: string, updates: any) => {
       const store = useNoteStore.getState();
@@ -38,7 +43,11 @@ export class PluginContext {
       return await store.saveNote({ ...existing, ...updates });
     },
     getNote: async (id: string) => {
-      return await useNoteStore.getState().getNote(id);
+      const note = await useNoteStore.getState().getNote(id);
+      if (note && !note.space) {
+        note.space = 'Other';
+      }
+      return note;
     },
     appendContent: async (id: string, markdown: string) => {
       const store = useNoteStore.getState();
@@ -61,11 +70,25 @@ export class PluginContext {
       return useNoteStore.getState().notes.map(n => ({
         id: n._id,
         title: n.title,
-        tags: n.tags,
+        space: n.space || 'Other',
+        tags: n.tags || [],
         parentId: n.parentId,
         createdAt: n.createdAt,
         updatedAt: n.updatedAt
       }));
+    },
+    listSpaces: async () => {
+      const set = new Set<string>(['Other']);
+      useNoteStore.getState().notes.forEach(n => {
+        if (n.space) set.add(n.space);
+      });
+      return Array.from(set).sort();
+    },
+    moveNoteToSpace: async (id: string, space: string) => {
+      const store = useNoteStore.getState();
+      const existing = await store.getNote(id);
+      if (!existing) throw new Error(`Note ${id} not found`);
+      return await store.saveNote({ ...existing, space: space || 'Other' });
     },
     deleteNote: async (id: string) => {
       await useNoteStore.getState().deleteNote(id);

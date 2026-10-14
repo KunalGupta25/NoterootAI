@@ -1,7 +1,11 @@
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 
-from schemas.ai import AgentRequest, ChatRequest, EmbedBulkRequest, EmbedRequest, EmbedResponse, SearchRequest, SearchResponse, SuggestRequest, SuggestResponse
+from providers.factory import get_provider
+from schemas.ai import (
+    AgentRequest, ChatRequest, EmbedBulkRequest, EmbedRequest, EmbedResponse,
+    ModelsRequest, ModelsResponse, SearchRequest, SearchResponse, SuggestRequest, SuggestResponse
+)
 from services.agent_service import run_agent
 from services.ai_service import chat, embed_note, search_notes, suggest_notes
 from services.vector_store import vector_store
@@ -51,3 +55,13 @@ async def streaming_chat(request: ChatRequest) -> StreamingResponse:
 @router.post("/agent")
 async def agent(request: AgentRequest) -> StreamingResponse:
     return StreamingResponse(run_agent(request), media_type="text/event-stream")
+
+
+@router.post("/models", response_model=ModelsResponse)
+async def fetch_models(request: ModelsRequest) -> ModelsResponse:
+    try:
+        provider = get_provider(request.provider, request.api_key, request.custom_base_url)
+        models = await provider.list_models()
+        return ModelsResponse(provider=request.provider, models=models)
+    except Exception as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error

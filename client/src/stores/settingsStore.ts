@@ -36,6 +36,10 @@ interface SettingsState {
   setProviderModel: (provider: string, model: string) => void;
   getProviderModel: (provider: string) => string;
 
+  // ── Fetched available models per provider ──────────────────────
+  fetchedModels: Record<string, string[]>;
+  setFetchedModels: (provider: string, models: string[]) => void;
+
   // ── Custom providers ──────────────────────────────────────────
   customProviders: CustomProviderConfig[];
   addCustomProvider: (config: Omit<CustomProviderConfig, 'id'>) => string;
@@ -116,6 +120,11 @@ export const useSettingsStore = create<SettingsState>()(
         const custom = state.customProviders.find((c) => c.id === provider);
         return custom?.defaultModel ?? '';
       },
+
+      // ── Fetched available models per provider ──────────────────
+      fetchedModels: {},
+      setFetchedModels: (provider, models) =>
+        set((s) => ({ fetchedModels: { ...s.fetchedModels, [provider]: models } })),
 
       // ── Custom providers ───────────────────────────────────────
       customProviders: [],
@@ -295,6 +304,7 @@ export const useSettingsStore = create<SettingsState>()(
           'setProviderKey', 'getProviderKey',
           'setActiveProvider',
           'setProviderModel', 'getProviderModel',
+          'setFetchedModels',
           'addCustomProvider', 'updateCustomProvider', 'removeCustomProvider', 'getCustomProvider',
           'setPluginSetting', 'getPluginSetting', 'setInstalledCommunityPlugins',
           'getActiveApiKey', 'isActiveProviderConfigured', 'getConfiguredProviders',

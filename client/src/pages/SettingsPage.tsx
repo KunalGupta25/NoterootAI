@@ -5,9 +5,11 @@ import { useNoteStore } from '../stores/noteStore';
 import { BUILTIN_PROVIDERS, BUILTIN_PROVIDER_IDS } from '../lib/providerConfig';
 import {
   User, Edit3, Bot, Cloud, Puzzle,
-  Palette, Check, Plus, Trash2, ExternalLink, Server, Download
+  Palette, Check, Plus, Trash2, ExternalLink, Server, Download,
+  RefreshCw, AlertCircle, CheckCircle2
 } from 'lucide-react';
 import { PluginSettingsPanels } from '../plugins/slots/PluginSettingsPanels';
+import { fetchAvailableModels } from '../services/modelService';
 
 type SettingsTab =
   | 'general'
@@ -25,7 +27,8 @@ export default function SettingsPage() {
     providerKeys, setProviderKey,
     activeProvider, setActiveProvider,
     providerModels, setProviderModel,
-    customProviders, addCustomProvider, removeCustomProvider,
+    fetchedModels, setFetchedModels,
+    customProviders, addCustomProvider, updateCustomProvider, removeCustomProvider,
   } = useSettingsStore();
 
   const [activeTab, setActiveTab] = useState<SettingsTab>('general');
@@ -48,6 +51,86 @@ export default function SettingsPage() {
   const [customApiKey, setCustomApiKey] = useState('');
   const [customModel, setCustomModel] = useState('');
 
+  // Live Model Fetching states
+  const [loadingModels, setLoadingModels] = useState<Record<string, boolean>>({});
+  const [modelSuccessMsg, setModelSuccessMsg] = useState<Record<string, string>>({});
+  const [modelErrorMsg, setModelErrorMsg] = useState<Record<string, string>>({});
+  const [customFetchedModels, setCustomFetchedModels] = useState<string[]>([]);
+  const [loadingCustomModels, setLoadingCustomModels] = useState(false);
+  const [customModelError, setCustomModelError] = useState<string | null>(null);
+
+  const handleFetchModels = async (pId: string, apiKey: string) => {
+    setLoadingModels(prev => ({ ...prev, [pId]: true }));
+    setModelErrorMsg(prev => ({ ...prev, [pId]: '' }));
+    setModelSuccessMsg(prev => ({ ...prev, [pId]: '' }));
+
+    try {
+      const models = await fetchAvailableModels({ provider: pId, apiKey });
+      setFetchedModels(pId, models);
+      setModelSuccessMsg(prev => ({ ...prev, [pId]: `Fetched ${models.length} models` }));
+      setTimeout(() => {
+        setModelSuccessMsg(prev => ({ ...prev, [pId]: '' }));
+      }, 3500);
+
+      const currentSelected = providerModels[pId];
+      if (!currentSelected || !models.includes(currentSelected)) {
+        if (models.length > 0) {
+          setProviderModel(pId, models[0]);
+        }
+      }
+    } catch (err: any) {
+      setModelErrorMsg(prev => ({ ...prev, [pId]: err.message || 'Failed to fetch models' }));
+    } finally {
+      setLoadingModels(prev => ({ ...prev, [pId]: false }));
+    }
+  };
+
+  const handleFetchCustomNewModels = async () => {
+    if (!customBaseUrl.trim()) return;
+    setLoadingCustomModels(true);
+    setCustomModelError(null);
+
+    try {
+      const models = await fetchAvailableModels({
+        provider: 'custom',
+        apiKey: customApiKey.trim(),
+        customBaseUrl: customBaseUrl.trim(),
+      });
+      setCustomFetchedModels(models);
+      if (models.length > 0 && (!customModel || !models.includes(customModel))) {
+        setCustomModel(models[0]);
+      }
+    } catch (err: any) {
+      setCustomModelError(err.message || 'Failed to fetch models from endpoint');
+    } finally {
+      setLoadingCustomModels(false);
+    }
+  };
+
+  const handleFetchExistingCustomModels = async (cp: any) => {
+    setLoadingModels(prev => ({ ...prev, [cp.id]: true }));
+    setModelErrorMsg(prev => ({ ...prev, [cp.id]: '' }));
+    setModelSuccessMsg(prev => ({ ...prev, [cp.id]: '' }));
+
+    try {
+      const models = await fetchAvailableModels({
+        provider: 'custom',
+        apiKey: cp.apiKey,
+        customBaseUrl: cp.baseUrl,
+      });
+      setFetchedModels(cp.id, models);
+      updateCustomProvider(cp.id, { models });
+      setModelSuccessMsg(prev => ({ ...prev, [cp.id]: `Fetched ${models.length} models` }));
+      setTimeout(() => {
+        setModelSuccessMsg(prev => ({ ...prev, [cp.id]: '' }));
+      }, 3500);
+    } catch (err: any) {
+      setModelErrorMsg(prev => ({ ...prev, [cp.id]: err.message || 'Failed to fetch models' }));
+    } finally {
+      setLoadingModels(prev => ({ ...prev, [cp.id]: false }));
+    }
+  };
+
   const handleAddCustomProvider = (e: React.FormEvent) => {
     e.preventDefault();
     if (!customName.trim() || !customBaseUrl.trim()) return;
@@ -56,15 +139,20 @@ export default function SettingsPage() {
       name: customName.trim(),
       baseUrl: customBaseUrl.trim(),
       apiKey: customApiKey.trim(),
-      models: customModel.trim() ? [customModel.trim()] : ['default'],
-      defaultModel: customModel.trim() || 'default',
+      models: customFetchedModels.length > 0 ? customFetchedModels : (customModel.trim() ? [customModel.trim()] : ['default']),
+      defaultModel: customModel.trim() || (customFetchedModels[0] || 'default'),
     });
+
+    if (customFetchedModels.length > 0) {
+      setFetchedModels(newId, customFetchedModels);
+    }
 
     setActiveProvider(newId);
     setCustomName('');
     setCustomBaseUrl('');
     setCustomApiKey('');
     setCustomModel('');
+    setCustomFetchedModels([]);
     setShowAddCustom(false);
   };
 
@@ -350,7 +438,11 @@ export default function SettingsPage() {
                     const p = BUILTIN_PROVIDERS[pId];
                     const currentKey = providerKeys[pId] || '';
                     const isActive = activeProvider === pId;
-                    const selectedModel = providerModels[pId] || p.models[0];
+                    const availableList = (fetchedModels[pId] && fetchedModels[pId].length > 0)
+                      ? fetchedModels[pId]
+                      : p.models;
+                    const selectedModel = providerModels[pId] || availableList[0];
+                    const isFetching = !!loadingModels[pId];
 
                     return (
                       <div
@@ -371,7 +463,7 @@ export default function SettingsPage() {
                               <span style={{ fontSize: '14px', fontWeight: 600, color: 'var(--fg)' }}>{p.label}</span>
                               {isActive && (
                                 <span style={{ marginLeft: '8px', fontSize: '11px', fontWeight: 600, padding: '2px 8px', borderRadius: '10px', background: 'rgba(224,84,56,0.14)', color: '#e05438' }}>
-                                  Active Engine
+                                   Active Engine
                                 </span>
                               )}
                             </div>
@@ -396,20 +488,61 @@ export default function SettingsPage() {
                         </div>
 
                         {/* Model & API Key Controls */}
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.4fr', gap: '12px', alignItems: 'center' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.4fr', gap: '12px', alignItems: 'flex-start' }}>
                           <div>
-                            <label style={{ display: 'block', fontSize: '11px', color: 'var(--muted)', marginBottom: '4px' }}>
-                              Default Model
-                            </label>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                              <label style={{ fontSize: '11px', color: 'var(--muted)' }}>
+                                Default Model
+                              </label>
+                              <button
+                                type="button"
+                                onClick={() => handleFetchModels(pId, currentKey)}
+                                disabled={isFetching || (!currentKey && pId !== 'openrouter')}
+                                title={!currentKey && pId !== 'openrouter' ? 'Enter API key first to fetch live models' : 'Fetch live available models'}
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  background: 'transparent',
+                                  border: 'none',
+                                  color: isFetching ? 'var(--muted)' : '#e05438',
+                                  fontSize: '11px',
+                                  fontWeight: 500,
+                                  cursor: (isFetching || (!currentKey && pId !== 'openrouter')) ? 'not-allowed' : 'pointer',
+                                  opacity: (!currentKey && pId !== 'openrouter') ? 0.45 : 1,
+                                  padding: 0,
+                                }}
+                              >
+                                <RefreshCw size={10} className={isFetching ? 'animate-spin' : ''} />
+                                <span>{isFetching ? 'Fetching...' : fetchedModels[pId]?.length ? 'Refresh Models' : 'Fetch Models'}</span>
+                              </button>
+                            </div>
+
                             <select
                               value={selectedModel}
                               onChange={e => setProviderModel(pId, e.target.value)}
                               style={{ ...inputStyle, padding: '7px 10px', fontSize: '12.5px' }}
                             >
-                              {p.models.map(m => (
+                              {availableList.map(m => (
                                 <option key={m} value={m}>{m}</option>
                               ))}
+                              {!availableList.includes(selectedModel) && (
+                                <option value={selectedModel}>{selectedModel} (custom)</option>
+                              )}
                             </select>
+
+                            {modelSuccessMsg[pId] && (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: '#22c55e', marginTop: '4px' }}>
+                                <CheckCircle2 size={11} />
+                                <span>{modelSuccessMsg[pId]}</span>
+                              </div>
+                            )}
+                            {modelErrorMsg[pId] && (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: '#ef4444', marginTop: '4px' }}>
+                                <AlertCircle size={11} />
+                                <span>{modelErrorMsg[pId]}</span>
+                              </div>
+                            )}
                           </div>
 
                           <div>
@@ -557,17 +690,85 @@ export default function SettingsPage() {
 
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '16px' }}>
                       <div>
-                        <label style={{ display: 'block', fontSize: '11.5px', color: 'var(--muted)', marginBottom: '4px' }}>
-                          Model Identifier *
-                        </label>
-                        <input
-                          type="text"
-                          required
-                          value={customModel}
-                          onChange={e => setCustomModel(e.target.value)}
-                          placeholder="e.g. llama3.2, mistral, deepseek-r1"
-                          style={{ ...inputStyle, padding: '7px 10px', fontSize: '12.5px' }}
-                        />
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                          <label style={{ fontSize: '11.5px', color: 'var(--muted)' }}>
+                            Model Identifier *
+                          </label>
+                          <button
+                            type="button"
+                            onClick={handleFetchCustomNewModels}
+                            disabled={loadingCustomModels || !customBaseUrl.trim()}
+                            title="Query endpoint for available models"
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              background: 'transparent',
+                              border: 'none',
+                              color: loadingCustomModels ? 'var(--muted)' : '#e05438',
+                              fontSize: '11px',
+                              fontWeight: 500,
+                              cursor: (loadingCustomModels || !customBaseUrl.trim()) ? 'not-allowed' : 'pointer',
+                              opacity: !customBaseUrl.trim() ? 0.45 : 1,
+                              padding: 0,
+                            }}
+                          >
+                            <RefreshCw size={10} className={loadingCustomModels ? 'animate-spin' : ''} />
+                            <span>{loadingCustomModels ? 'Connecting...' : 'Fetch Models'}</span>
+                          </button>
+                        </div>
+
+                        {customFetchedModels.length > 0 ? (
+                          <div style={{ display: 'flex', gap: '6px' }}>
+                            <select
+                              value={customModel}
+                              onChange={e => setCustomModel(e.target.value)}
+                              style={{ ...inputStyle, padding: '7px 10px', fontSize: '12.5px', flex: 1 }}
+                            >
+                              {customFetchedModels.map(m => (
+                                <option key={m} value={m}>{m}</option>
+                              ))}
+                            </select>
+                            <button
+                              type="button"
+                              onClick={() => setCustomFetchedModels([])}
+                              title="Type custom name manually"
+                              style={{
+                                padding: '6px 10px',
+                                fontSize: '11px',
+                                border: '1px solid var(--border)',
+                                background: 'var(--surface-2)',
+                                color: 'var(--muted)',
+                                borderRadius: '6px',
+                                cursor: 'pointer',
+                              }}
+                            >
+                              Edit
+                            </button>
+                          </div>
+                        ) : (
+                          <input
+                            type="text"
+                            required
+                            value={customModel}
+                            onChange={e => setCustomModel(e.target.value)}
+                            placeholder="e.g. llama3.2, mistral, deepseek-r1"
+                            style={{ ...inputStyle, padding: '7px 10px', fontSize: '12.5px' }}
+                          />
+                        )}
+
+                        {customFetchedModels.length > 0 && (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: '#22c55e', marginTop: '4px' }}>
+                            <CheckCircle2 size={11} />
+                            <span>Loaded {customFetchedModels.length} models from endpoint</span>
+                          </div>
+                        )}
+                        {customModelError && (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: '#ef4444', marginTop: '4px' }}>
+                            <AlertCircle size={11} />
+                            <span>{customModelError}</span>
+                          </div>
+                        )}
                       </div>
                       <div>
                         <label style={{ display: 'block', fontSize: '11.5px', color: 'var(--muted)', marginBottom: '4px' }}>
@@ -597,11 +798,15 @@ export default function SettingsPage() {
                           cursor: 'pointer',
                         }}
                       >
-                        Save & Connect
+                        Save Endpoint
                       </button>
                       <button
                         type="button"
-                        onClick={() => setShowAddCustom(false)}
+                        onClick={() => {
+                          setShowAddCustom(false);
+                          setCustomFetchedModels([]);
+                          setCustomModelError(null);
+                        }}
                         style={{
                           padding: '7px 14px',
                           borderRadius: '6px',
@@ -637,6 +842,9 @@ export default function SettingsPage() {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                     {customProviders.map(cp => {
                       const isActive = activeProvider === cp.id;
+                      const cpModels = fetchedModels[cp.id] || cp.models || [cp.defaultModel];
+                      const isCpLoading = !!loadingModels[cp.id];
+
                       return (
                         <div
                           key={cp.id}
@@ -649,6 +857,8 @@ export default function SettingsPage() {
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'space-between',
+                            flexWrap: 'wrap',
+                            gap: '12px',
                           }}
                         >
                           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -676,15 +886,68 @@ export default function SettingsPage() {
                                   </span>
                                 )}
                               </div>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11.5px', color: 'var(--muted)', marginTop: '2px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11.5px', color: 'var(--muted)', marginTop: '2px', flexWrap: 'wrap' }}>
                                 <span>{cp.baseUrl}</span>
                                 <span>•</span>
-                                <span>Model: <strong>{cp.defaultModel}</strong></span>
+                                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                                  <span>Model:</span>
+                                  {cpModels.length > 1 ? (
+                                    <select
+                                      value={cp.defaultModel}
+                                      onChange={e => {
+                                        updateCustomProvider(cp.id, { defaultModel: e.target.value });
+                                        setProviderModel(cp.id, e.target.value);
+                                      }}
+                                      style={{ ...inputStyle, padding: '2px 6px', fontSize: '11px', height: 'auto', width: 'auto' }}
+                                    >
+                                      {cpModels.map(m => (
+                                        <option key={m} value={m}>{m}</option>
+                                      ))}
+                                    </select>
+                                  ) : (
+                                    <strong>{cp.defaultModel}</strong>
+                                  )}
+                                </div>
                               </div>
+                              {modelSuccessMsg[cp.id] && (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: '#22c55e', marginTop: '4px' }}>
+                                  <CheckCircle2 size={11} />
+                                  <span>{modelSuccessMsg[cp.id]}</span>
+                                </div>
+                              )}
+                              {modelErrorMsg[cp.id] && (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: '#ef4444', marginTop: '4px' }}>
+                                  <AlertCircle size={11} />
+                                  <span>{modelErrorMsg[cp.id]}</span>
+                                </div>
+                              )}
                             </div>
                           </div>
 
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <button
+                              type="button"
+                              onClick={() => handleFetchExistingCustomModels(cp)}
+                              disabled={isCpLoading}
+                              title="Fetch available models from this endpoint"
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                padding: '4px 10px',
+                                borderRadius: '5px',
+                                border: '1px solid var(--border)',
+                                background: 'transparent',
+                                color: 'var(--fg)',
+                                fontSize: '12px',
+                                fontWeight: 500,
+                                cursor: isCpLoading ? 'not-allowed' : 'pointer',
+                                opacity: isCpLoading ? 0.6 : 1,
+                              }}
+                            >
+                              <RefreshCw size={11} className={isCpLoading ? 'animate-spin' : ''} />
+                              <span>{isCpLoading ? 'Fetching...' : 'Fetch Models'}</span>
+                            </button>
                             <button
                               onClick={() => setActiveProvider(cp.id)}
                               style={{

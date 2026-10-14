@@ -74,6 +74,33 @@ class Provider:
                 args = {}
             yield {"type": "tool_request", "tool": call["name"], "args": args, "call_id": call["id"]}
 
+    async def list_models(self) -> list[str]:
+        try:
+            response = await self.client.models.list()
+            raw_models: list[str] = [m.id for m in response.data if hasattr(m, "id")]
+            if self.name == "openai":
+                excluded_prefixes = ("text-embedding", "whisper", "tts", "dall-e", "text-moderation", "babbage", "davinci")
+                chat_models = [m for m in raw_models if not any(m.startswith(p) for p in excluded_prefixes)]
+                def sort_key(name: str):
+                    if name.startswith(("gpt-4o", "o1", "o3", "gpt-4")):
+                        return (0, name)
+                    if "gpt" in name:
+                        return (1, name)
+                    return (2, name)
+                chat_models.sort(key=sort_key)
+                return chat_models or raw_models
+            elif self.name == "gemini":
+                cleaned = [m.replace("models/", "") for m in raw_models]
+                cleaned = [m for m in cleaned if "gemini" in m.lower() and "embedding" not in m.lower()]
+                cleaned.sort(reverse=True)
+                return cleaned or raw_models
+            raw_models.sort()
+            return raw_models
+        except Exception as err:
+            import logging
+            logging.exception("Failed to list models for %s: %s", self.name, err)
+            raise
+
 
 def get_provider(name: str = "openai", api_key: str | None = None, custom_base_url: str | None = None):
     name = (name or "openai").lower()

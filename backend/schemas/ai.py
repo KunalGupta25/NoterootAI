@@ -110,3 +110,14 @@ class AgentRequest(BaseModel):
     temperature: float = 0.5
     max_tokens: int = 4096
     tool_result: AgentToolResult | None = None
+
+
+class ModelsRequest(BaseModel):
+    provider: str = "openai"
+    api_key: str | None = None
+    custom_base_url: str | None = None
+
+
+class ModelsResponse(BaseModel):
+    provider: str
+    models: list[str]

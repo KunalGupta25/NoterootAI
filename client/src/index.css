@@ -933,32 +933,62 @@ ul[data-type="taskList"] ul[data-type="taskList"],
 }
 
 /* ═══════════════════════════════════════════════════
-   TIPTAP TABLES
+   TIPTAP TABLES & COLUMN RESIZING
 ═══════════════════════════════════════════════════ */
+.ProseMirror .tableWrapper {
+  overflow-x: auto;
+  margin: 18px 0;
+  position: relative;
+  border-radius: 8px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+.ProseMirror .tableWrapper::-webkit-scrollbar {
+  height: 6px;
+}
+
+.ProseMirror .tableWrapper::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.ProseMirror .tableWrapper::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+
 .ProseMirror table {
   border-collapse: collapse;
   table-layout: fixed;
   width: 100%;
-  margin: 16px 0;
+  margin: 0;
   overflow: hidden;
-  border-radius: 6px;
+  border-radius: 8px;
   border: 1px solid var(--border);
+  background: var(--bg);
 }
 
 .ProseMirror td,
 .ProseMirror th {
-  min-width: 1em;
+  min-width: 50px;
   border: 1px solid var(--border);
-  padding: 8px 12px;
+  padding: 10px 14px;
   vertical-align: top;
   box-sizing: border-box;
   position: relative;
+  transition: background-color 0.12s ease;
 }
 
 .ProseMirror th {
   font-weight: 600;
   text-align: left;
   background: var(--surface-2);
+  color: var(--fg);
+}
+
+.ProseMirror td:hover,
+.ProseMirror th:hover {
+  background-color: rgba(224, 84, 56, 0.02);
 }
 
 .ProseMirror .selectedCell:after {
@@ -966,8 +996,27 @@ ul[data-type="taskList"] ul[data-type="taskList"],
   position: absolute;
   content: "";
   left: 0; right: 0; top: 0; bottom: 0;
-  background: rgba(224, 84, 56, 0.12);
+  background: rgba(224, 84, 56, 0.14);
   pointer-events: none;
+}
+
+/* Active column resize divider handle */
+.ProseMirror .column-resize-handle {
+  position: absolute;
+  right: -2px;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background-color: #e05438;
+  pointer-events: none;
+  z-index: 20;
+  box-shadow: 0 0 6px rgba(224, 84, 56, 0.6);
+  border-radius: 2px;
+}
+
+.ProseMirror.resize-cursor,
+.ProseMirror.resize-cursor * {
+  cursor: col-resize !important;
 }
 
 /* ═══ CALLOUTS & DIAGRAMS ═══ */

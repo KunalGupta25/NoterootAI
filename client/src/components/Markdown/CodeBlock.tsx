@@ -77,8 +77,21 @@ export function CodeBlock({ node, inline, className, children, ...props }: any) 
           </button>
         </div>
 
-        <pre className="code-block-pre">
-          <code className={className} spellCheck={false} {...props}>
+        <pre
+          className="code-block-pre"
+          spellCheck={false}
+          autoCorrect="off"
+          autoCapitalize="off"
+          data-gramm="false"
+        >
+          <code
+            className={className}
+            spellCheck={false}
+            autoCorrect="off"
+            autoCapitalize="off"
+            data-gramm="false"
+            {...props}
+          >
             {children}
           </code>
         </pre>
@@ -87,7 +100,14 @@ export function CodeBlock({ node, inline, className, children, ...props }: any) 
   }
 
   return (
-    <code className={className} spellCheck={false} {...props}>
+    <code
+      className={className}
+      spellCheck={false}
+      autoCorrect="off"
+      autoCapitalize="off"
+      data-gramm="false"
+      {...props}
+    >
       {children}
     </code>
   );

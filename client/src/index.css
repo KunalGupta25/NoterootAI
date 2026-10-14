@@ -1319,6 +1319,12 @@ ul[data-type="taskList"] ul[data-type="taskList"],
   color: #e4e4e7 !important;
   tab-size: 2;
   font-family: inherit;
+  -webkit-spell-check: none;
+}
+
+.code-block-pre code,
+.code-block-wrapper code {
+  -webkit-spell-check: none;
 }
 
 [data-theme='light'] .code-block-pre {

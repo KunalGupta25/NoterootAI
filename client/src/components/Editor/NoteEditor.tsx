@@ -427,6 +427,13 @@ export default function NoteEditor({
       }).configure({
         lowlight,
         defaultLanguage: 'plaintext',
+        HTMLAttributes: {
+          spellcheck: 'false',
+          autocorrect: 'off',
+          autocapitalize: 'off',
+          'data-gramm': 'false',
+          'data-enable-grammarly': 'false',
+        },
       }),
       Placeholder.configure({ placeholder: 'Type / for commands, @ to mention a page...' }),
       TaskList,

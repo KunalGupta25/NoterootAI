@@ -86,7 +86,14 @@ export function CodeBlockComponent({ node, updateAttributes }: any) {
   };
 
   return (
-    <NodeViewWrapper className="code-block-wrapper">
+    <NodeViewWrapper
+      className="code-block-wrapper"
+      spellCheck={false}
+      autoCorrect="off"
+      autoCapitalize="off"
+      data-gramm="false"
+      data-enable-grammarly="false"
+    >
       <div className="code-block-header">
         {/* Left: macOS dots + Language Selector Badge */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -196,8 +203,21 @@ export function CodeBlockComponent({ node, updateAttributes }: any) {
       </div>
 
       {/* Code Text Area */}
-      <pre className="code-block-pre">
-        <NodeViewContent as={'code' as any} />
+      <pre
+        className="code-block-pre"
+        spellCheck={false}
+        autoCorrect="off"
+        autoCapitalize="off"
+        data-gramm="false"
+      >
+        <NodeViewContent
+          as={'code' as any}
+          spellCheck={false}
+          autoCorrect="off"
+          autoCapitalize="off"
+          data-gramm="false"
+          data-enable-grammarly="false"
+        />
       </pre>
     </NodeViewWrapper>
   );

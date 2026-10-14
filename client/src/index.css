@@ -1260,16 +1260,11 @@ ul[data-type="taskList"] ul[data-type="taskList"],
   display: flex !important;
   flex-direction: row !important;
   align-items: center !important;
-  position: sticky !important;
-  top: 0 !important;
   background: var(--surface) !important;
   border: 1px solid var(--border) !important;
   border-radius: 8px !important;
-  padding: 4px 6px !important;
-  gap: 2px !important;
-  margin-bottom: 12px !important;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12) !important;
-  z-index: 30 !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16) !important;
+  z-index: 40 !important;
   width: fit-content !important;
   user-select: none !important;
 }
@@ -1277,4 +1272,179 @@ ul[data-type="taskList"] ul[data-type="taskList"],
 [data-theme='dark'] .table-toolbar {
   background: #1e1e1e !important;
   border-color: #333333 !important;
+}
+
+/* ═══════════════════════════════════════════════════
+   CODE BLOCKS & SYNTAX HIGHLIGHTING
+═══════════════════════════════════════════════════ */
+.code-block-wrapper {
+  margin: 20px 0;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: #18181b;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.18);
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  transition: border-color 0.15s ease;
+}
+
+[data-theme='light'] .code-block-wrapper {
+  background: #f8fafc;
+  border-color: #e2e8f0;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+}
+
+.code-block-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 14px;
+  background: rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  user-select: none;
+}
+
+[data-theme='light'] .code-block-header {
+  background: #f1f5f9;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.code-block-pre {
+  margin: 0 !important;
+  padding: 16px 18px !important;
+  background: transparent !important;
+  overflow-x: auto;
+  font-size: 13.5px !important;
+  line-height: 1.65 !important;
+  color: #e4e4e7 !important;
+  tab-size: 2;
+  font-family: inherit;
+}
+
+[data-theme='light'] .code-block-pre {
+  color: #1e293b !important;
+}
+
+/* ─── Syntax Highlighting (Dark Theme Default) ─── */
+.hljs-comment,
+.hljs-quote {
+  color: #71717a !important;
+  font-style: italic;
+}
+
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-subst {
+  color: #f43f5e !important;
+  font-weight: 500;
+}
+
+.hljs-number,
+.hljs-literal,
+.hljs-variable,
+.hljs-template-variable,
+.hljs-tag .hljs-attr {
+  color: #fb923c !important;
+}
+
+.hljs-string,
+.hljs-doctag {
+  color: #34d399 !important;
+}
+
+.hljs-title,
+.hljs-section,
+.hljs-selector-id {
+  color: #38bdf8 !important;
+  font-weight: 600;
+}
+
+.hljs-type,
+.hljs-class .hljs-title {
+  color: #a78bfa !important;
+}
+
+.hljs-tag,
+.hljs-name,
+.hljs-attribute {
+  color: #f43f5e !important;
+}
+
+.hljs-regexp,
+.hljs-link {
+  color: #fbbf24 !important;
+}
+
+.hljs-symbol,
+.hljs-bullet {
+  color: #38bdf8 !important;
+}
+
+.hljs-built_in,
+.hljs-builtin-name {
+  color: #22d3ee !important;
+}
+
+.hljs-meta {
+  color: #a1a1aa !important;
+}
+
+.hljs-deletion {
+  background: rgba(239, 68, 68, 0.2);
+  color: #fca5a5 !important;
+}
+
+.hljs-addition {
+  background: rgba(34, 197, 94, 0.2);
+  color: #86efac !important;
+}
+
+/* ─── Syntax Highlighting (Light Theme) ─── */
+[data-theme='light'] .hljs-comment,
+[data-theme='light'] .hljs-quote {
+  color: #64748b !important;
+  font-style: italic;
+}
+
+[data-theme='light'] .hljs-keyword,
+[data-theme='light'] .hljs-selector-tag,
+[data-theme='light'] .hljs-subst {
+  color: #e11d48 !important;
+  font-weight: 500;
+}
+
+[data-theme='light'] .hljs-number,
+[data-theme='light'] .hljs-literal,
+[data-theme='light'] .hljs-variable,
+[data-theme='light'] .hljs-template-variable,
+[data-theme='light'] .hljs-tag .hljs-attr {
+  color: #d97706 !important;
+}
+
+[data-theme='light'] .hljs-string,
+[data-theme='light'] .hljs-doctag {
+  color: #059669 !important;
+}
+
+[data-theme='light'] .hljs-title,
+[data-theme='light'] .hljs-section,
+[data-theme='light'] .hljs-selector-id {
+  color: #0284c7 !important;
+  font-weight: 600;
+}
+
+[data-theme='light'] .hljs-type,
+[data-theme='light'] .hljs-class .hljs-title {
+  color: #7c3aed !important;
+}
+
+[data-theme='light'] .hljs-tag,
+[data-theme='light'] .hljs-name,
+[data-theme='light'] .hljs-attribute {
+  color: #e11d48 !important;
+}
+
+[data-theme='light'] .hljs-built_in,
+[data-theme='light'] .hljs-builtin-name {
+  color: #0891b2 !important;
 }

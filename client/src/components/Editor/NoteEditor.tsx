@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import BlockMenu from './BlockMenu';
 import SelectionToolbar from './SelectionToolbar';
 import TableToolbar from './TableToolbar';
-import { useEditor, EditorContent, ReactRenderer } from '@tiptap/react';
+import { useEditor, EditorContent, ReactRenderer, ReactNodeViewRenderer } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Highlight from '@tiptap/extension-highlight';
 import Placeholder from '@tiptap/extension-placeholder';
@@ -24,6 +24,19 @@ import { TableHeader } from '@tiptap/extension-table-header';
 import 'katex/dist/katex.min.css';
 import { useNoteStore } from '../../stores/noteStore';
 import PluginRuntime from '../../plugins/runtime/PluginRuntime';
+import { CodeBlockLowlight } from '@tiptap/extension-code-block-lowlight';
+import { createLowlight, common } from 'lowlight';
+import { CodeBlockComponent } from './CodeBlockComponent';
+
+const lowlight = createLowlight(common);
+lowlight.registerAlias({
+  xml: ['html', 'xhtml'],
+  javascript: ['jsx', 'react', 'js'],
+  typescript: ['tsx', 'ts'],
+  markdown: ['md', 'mkd'],
+  python: ['py'],
+  plaintext: ['text', 'txt'],
+});
 
 // ─── Slash command items (grouped by category) ───
 function getSlashItems(query: string) {
@@ -77,9 +90,31 @@ function getSlashItems(query: string) {
       command: ({ editor, range }: any) => { editor.chain().focus().deleteRange(range).setHorizontalRule().run() } },
 
     // ── Code & Technical ──
-    { title: 'Code Block', description: 'Write a code snippet', icon: '</>', category: 'Code & Technical',
+    { title: 'Code Block', description: 'Write code with syntax highlighting', icon: '</>', category: 'Code & Technical',
       command: ({ editor, range }: any) => { editor.chain().focus().deleteRange(range).toggleCodeBlock().run() } },
-    { title: 'Inline Code', description: 'Mark text as code', icon: '`c`', category: 'Code & Technical',
+    { title: 'Python Code', description: 'Python code block', icon: '🐍', category: 'Code & Technical',
+      command: ({ editor, range }: any) => { editor.chain().focus().deleteRange(range).toggleCodeBlock({ language: 'python' }).run() } },
+    { title: 'JavaScript Code', description: 'JavaScript code block', icon: '⚡', category: 'Code & Technical',
+      command: ({ editor, range }: any) => { editor.chain().focus().deleteRange(range).toggleCodeBlock({ language: 'javascript' }).run() } },
+    { title: 'TypeScript Code', description: 'TypeScript code block', icon: '🔷', category: 'Code & Technical',
+      command: ({ editor, range }: any) => { editor.chain().focus().deleteRange(range).toggleCodeBlock({ language: 'typescript' }).run() } },
+    { title: 'React / JSX Code', description: 'React JSX/TSX component block', icon: '⚛️', category: 'Code & Technical',
+      command: ({ editor, range }: any) => { editor.chain().focus().deleteRange(range).toggleCodeBlock({ language: 'react' }).run() } },
+    { title: 'SQL Query', description: 'SQL database query block', icon: '🗄️', category: 'Code & Technical',
+      command: ({ editor, range }: any) => { editor.chain().focus().deleteRange(range).toggleCodeBlock({ language: 'sql' }).run() } },
+    { title: 'HTML Code', description: 'HTML markup block', icon: '🌐', category: 'Code & Technical',
+      command: ({ editor, range }: any) => { editor.chain().focus().deleteRange(range).toggleCodeBlock({ language: 'html' }).run() } },
+    { title: 'CSS Code', description: 'CSS stylesheet block', icon: '🎨', category: 'Code & Technical',
+      command: ({ editor, range }: any) => { editor.chain().focus().deleteRange(range).toggleCodeBlock({ language: 'css' }).run() } },
+    { title: 'C / C++ Code', description: 'C or C++ programming block', icon: '⚙️', category: 'Code & Technical',
+      command: ({ editor, range }: any) => { editor.chain().focus().deleteRange(range).toggleCodeBlock({ language: 'cpp' }).run() } },
+    { title: 'Java Code', description: 'Java code block', icon: '☕', category: 'Code & Technical',
+      command: ({ editor, range }: any) => { editor.chain().focus().deleteRange(range).toggleCodeBlock({ language: 'java' }).run() } },
+    { title: 'Go Code', description: 'Go (Golang) code block', icon: '🐹', category: 'Code & Technical',
+      command: ({ editor, range }: any) => { editor.chain().focus().deleteRange(range).toggleCodeBlock({ language: 'go' }).run() } },
+    { title: 'Markdown Block', description: 'Markdown raw text block', icon: '📝', category: 'Code & Technical',
+      command: ({ editor, range }: any) => { editor.chain().focus().deleteRange(range).toggleCodeBlock({ language: 'markdown' }).run() } },
+    { title: 'Inline Code', description: 'Mark text as inline code', icon: '`c`', category: 'Code & Technical',
       command: ({ editor, range }: any) => { editor.chain().focus().deleteRange(range).toggleCode().run() } },
     { title: 'Math Equation', description: 'LaTeX math formula', icon: '∑', category: 'Code & Technical',
       command: ({ editor, range }: any) => {
@@ -364,12 +399,16 @@ export default function NoteEditor({
       StarterKit.configure({
         horizontalRule: false,
         link: false,
-        codeBlock: {
-          HTMLAttributes: {
-            spellcheck: 'false',
-          },
-        },
+        codeBlock: false,
       } as any),
+      CodeBlockLowlight.extend({
+        addNodeView() {
+          return ReactNodeViewRenderer(CodeBlockComponent);
+        },
+      }).configure({
+        lowlight,
+        defaultLanguage: 'plaintext',
+      }),
       Placeholder.configure({ placeholder: 'Type / for commands, @ to mention a page...' }),
       TaskList,
       TaskItem.configure({ nested: true }),

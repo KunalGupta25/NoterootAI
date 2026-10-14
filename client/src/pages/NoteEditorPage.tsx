@@ -7,7 +7,7 @@ import {
   Bold, Italic, Underline, Strikethrough, Code, Code2,
   Quote, Link as LinkIcon, List, ListOrdered, Table, Image,
   Wand2, Check, Scissors, Plus, Palette, Globe,
-  Folder, ChevronDown, CheckSquare
+  Folder, ChevronDown, CheckSquare, Maximize2, Minimize2
 } from 'lucide-react';
 import { useSettingsStore } from '../stores/settingsStore';
 import { isBuiltinProvider } from '../lib/providerConfig';
@@ -57,6 +57,26 @@ export default function NoteEditorPage() {
       return 320;
     }
   });
+
+  // Full-width editor layout toggle (persisted in localStorage, defaults to true for wide space utilization)
+  const [isFullWidth, setIsFullWidth] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('noteroot_editor_full_width');
+      return saved !== null ? saved === 'true' : true;
+    } catch {
+      return true;
+    }
+  });
+
+  const toggleFullWidth = () => {
+    setIsFullWidth(prev => {
+      const next = !prev;
+      try {
+        localStorage.setItem('noteroot_editor_full_width', String(next));
+      } catch {}
+      return next;
+    });
+  };
 
   const isResizingRef = useRef(false);
 
@@ -605,6 +625,25 @@ export default function NoteEditorPage() {
             </div>
             {id && id !== 'new' && <NotePageActionsBar noteId={id} />}
             <button
+              onClick={toggleFullWidth}
+              title={isFullWidth ? "Standard width" : "Full width"}
+              style={{
+                background: isFullWidth ? 'rgba(224, 84, 56, 0.12)' : 'transparent',
+                border: 'none',
+                color: isFullWidth ? '#e05438' : 'var(--muted)',
+                cursor: 'pointer',
+                padding: '6px',
+                borderRadius: '4px',
+                display: 'flex',
+                alignItems: 'center',
+                transition: 'all 0.15s',
+              }}
+              onMouseEnter={e => !isFullWidth && (e.currentTarget.style.color = 'var(--fg)')}
+              onMouseLeave={e => !isFullWidth && (e.currentTarget.style.color = 'var(--muted)')}
+            >
+              {isFullWidth ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+            </button>
+            <button
               onClick={() => setShowAiAssistant(!showAiAssistant)}
               title="Toggle AI Assistant"
               style={{
@@ -634,11 +673,12 @@ export default function NoteEditorPage() {
           style={{
             flex: 1,
             overflowY: 'auto',
-            padding: '36px 48px 80px',
-            maxWidth: '820px',
+            padding: isFullWidth ? '32px 56px 80px' : '36px 48px 80px',
+            maxWidth: isFullWidth ? '100%' : '1100px',
             margin: '0 auto',
             width: '100%',
             boxSizing: 'border-box',
+            transition: 'max-width 0.15s ease, padding 0.15s ease',
           }}
         >
           {/* Note Title Input */}

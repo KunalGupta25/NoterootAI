@@ -961,8 +961,8 @@ ul[data-type="taskList"] ul[data-type="taskList"],
   border-collapse: collapse;
   table-layout: fixed;
   width: 100%;
+  min-width: 100%;
   margin: 0;
-  overflow: hidden;
   border-radius: 8px;
   border: 1px solid var(--border);
   background: var(--bg);

@@ -8,6 +8,7 @@ interface TableToolbarProps {
 
 export default function TableToolbar({ editor }: TableToolbarProps) {
   const [isInTable, setIsInTable] = useState(false);
+  const [containerWidth, setContainerWidth] = useState(0);
   const [tableMetrics, setTableMetrics] = useState<{
     top: number;
     left: number;
@@ -51,6 +52,7 @@ export default function TableToolbar({ editor }: TableToolbarProps) {
         if (editorWrapper) {
           const wrapRect = editorWrapper.getBoundingClientRect();
           const tableRect = tableWrapper.getBoundingClientRect();
+          setContainerWidth(wrapRect.width);
           setTableMetrics({
             top: tableRect.top - wrapRect.top,
             left: tableRect.left - wrapRect.left,
@@ -78,7 +80,7 @@ export default function TableToolbar({ editor }: TableToolbarProps) {
     };
   }, [editor, checkTable]);
 
-  if (!isInTable) return null;
+  if (!isInTable || !tableMetrics) return null;
 
   const btnStyle: React.CSSProperties = {
     display: 'flex',
@@ -94,6 +96,7 @@ export default function TableToolbar({ editor }: TableToolbarProps) {
     fontFamily: 'var(--font-body)',
     transition: 'all 0.12s ease',
     whiteSpace: 'nowrap' as const,
+    flexShrink: 0,
   };
 
   const primaryBtnStyle: React.CSSProperties = {
@@ -110,26 +113,30 @@ export default function TableToolbar({ editor }: TableToolbarProps) {
 
   return (
     <>
-      {/* ── Top Floating/Sticky Action Bar ── */}
+      {/* ── Table Action Bar Anchored Directly Above the Active Table ── */}
       <div
         className="table-toolbar"
         style={{
           display: 'flex',
           flexDirection: 'row',
           alignItems: 'center',
-          position: 'sticky',
-          top: 0,
+          position: 'absolute',
+          top: `${Math.max(0, tableMetrics.top - 46)}px`,
+          left: `${tableMetrics.left}px`,
           background: 'var(--surface)',
           border: '1px solid var(--border)',
           borderRadius: '8px',
           padding: '4px 8px',
           gap: '3px',
-          marginBottom: '12px',
-          boxShadow: '0 6px 20px rgba(0, 0, 0, 0.12)',
+          boxShadow: '0 8px 24px rgba(0, 0, 0, 0.18)',
           zIndex: 40,
           width: 'fit-content',
+          maxWidth: 'calc(100% - 16px)',
+          overflowX: 'auto',
           userSelect: 'none',
           backdropFilter: 'blur(8px)',
+          whiteSpace: 'nowrap',
+          scrollbarWidth: 'none',
         }}
       >
         {/* Quick Add Row / Col (Prominent) */}
@@ -157,7 +164,7 @@ export default function TableToolbar({ editor }: TableToolbarProps) {
 
         {divider}
 
-        {/* Secondary Row/Col Insertions */}
+        {/* Directional Row/Col Insertions */}
         <button
           style={btnStyle}
           onClick={() => editor.chain().focus().addRowBefore().run()}
@@ -238,98 +245,107 @@ export default function TableToolbar({ editor }: TableToolbarProps) {
 
         {divider}
 
-        <div style={{ fontSize: '11px', color: 'var(--muted)', padding: '0 4px', fontStyle: 'italic' }}>
+        <div
+          style={{
+            fontSize: '11px',
+            color: 'var(--muted)',
+            padding: '0 4px',
+            fontStyle: 'italic',
+            whiteSpace: 'nowrap',
+            flexShrink: 0,
+          }}
+        >
           Tip: Tab in last cell adds row
         </div>
       </div>
 
       {/* ── Direct In-Table Controls ── */}
-      {tableMetrics && (
-        <>
-          {/* Quick Add Row Button right at the bottom of the active table */}
-          <button
-            onClick={(e) => {
-              e.preventDefault();
-              editor.chain().focus().addRowAfter().run();
-            }}
-            style={{
-              position: 'absolute',
-              top: `${tableMetrics.top + tableMetrics.height + 4}px`,
-              left: `${tableMetrics.left}px`,
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '4px 12px',
-              fontSize: '11.5px',
-              fontWeight: 500,
-              color: 'var(--muted)',
-              background: 'var(--surface)',
-              border: '1px dashed var(--border)',
-              borderRadius: '6px',
-              cursor: 'pointer',
-              transition: 'all 0.15s ease',
-              zIndex: 25,
-            }}
-            onMouseEnter={e => {
-              e.currentTarget.style.color = '#e05438';
-              e.currentTarget.style.borderColor = '#e05438';
-              e.currentTarget.style.background = 'rgba(224, 84, 56, 0.08)';
-            }}
-            onMouseLeave={e => {
-              e.currentTarget.style.color = 'var(--muted)';
-              e.currentTarget.style.borderColor = 'var(--border)';
-              e.currentTarget.style.background = 'var(--surface)';
-            }}
-            title="Add a new row at bottom (or press Tab in last cell)"
-          >
-            <Plus size={13} />
-            <span>Add row</span>
-          </button>
+      {/* Quick Add Row Button right at the bottom of the active table */}
+      <button
+        onClick={(e) => {
+          e.preventDefault();
+          editor.chain().focus().addRowAfter().run();
+        }}
+        style={{
+          position: 'absolute',
+          top: `${tableMetrics.top + tableMetrics.height + 6}px`,
+          left: `${tableMetrics.left}px`,
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px',
+          padding: '4px 12px',
+          fontSize: '11.5px',
+          fontWeight: 500,
+          color: 'var(--muted)',
+          background: 'var(--surface)',
+          border: '1px dashed var(--border)',
+          borderRadius: '6px',
+          cursor: 'pointer',
+          transition: 'all 0.15s ease',
+          zIndex: 25,
+          whiteSpace: 'nowrap',
+        }}
+        onMouseEnter={e => {
+          e.currentTarget.style.color = '#e05438';
+          e.currentTarget.style.borderColor = '#e05438';
+          e.currentTarget.style.background = 'rgba(224, 84, 56, 0.08)';
+        }}
+        onMouseLeave={e => {
+          e.currentTarget.style.color = 'var(--muted)';
+          e.currentTarget.style.borderColor = 'var(--border)';
+          e.currentTarget.style.background = 'var(--surface)';
+        }}
+        title="Add a new row at bottom (or press Tab in last cell)"
+      >
+        <Plus size={13} />
+        <span>Add row</span>
+      </button>
 
-          {/* Quick Add Column Button at the right edge of the active table */}
-          <button
-            onClick={(e) => {
-              e.preventDefault();
-              editor.chain().focus().addColumnAfter().run();
-            }}
-            style={{
-              position: 'absolute',
-              top: `${tableMetrics.top}px`,
-              left: `${tableMetrics.left + tableMetrics.width + 6}px`,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '4px',
-              padding: '6px 8px',
-              fontSize: '11.5px',
-              fontWeight: 500,
-              color: 'var(--muted)',
-              background: 'var(--surface)',
-              border: '1px dashed var(--border)',
-              borderRadius: '6px',
-              cursor: 'pointer',
-              transition: 'all 0.15s ease',
-              zIndex: 25,
-              whiteSpace: 'nowrap',
-            }}
-            onMouseEnter={e => {
-              e.currentTarget.style.color = '#e05438';
-              e.currentTarget.style.borderColor = '#e05438';
-              e.currentTarget.style.background = 'rgba(224, 84, 56, 0.08)';
-            }}
-            onMouseLeave={e => {
-              e.currentTarget.style.color = 'var(--muted)';
-              e.currentTarget.style.borderColor = 'var(--border)';
-              e.currentTarget.style.background = 'var(--surface)';
-            }}
-            title="Add a new column to the right"
-          >
-            <Plus size={13} />
-            <span>Col</span>
-          </button>
-        </>
+      {/* Quick Add Column Button at the right edge (only when room is available) */}
+      {tableMetrics.left + tableMetrics.width + 44 <= containerWidth && (
+        <button
+          onClick={(e) => {
+            e.preventDefault();
+            editor.chain().focus().addColumnAfter().run();
+          }}
+          style={{
+            position: 'absolute',
+            top: `${tableMetrics.top}px`,
+            left: `${tableMetrics.left + tableMetrics.width + 6}px`,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '4px',
+            padding: '6px 8px',
+            fontSize: '11.5px',
+            fontWeight: 500,
+            color: 'var(--muted)',
+            background: 'var(--surface)',
+            border: '1px dashed var(--border)',
+            borderRadius: '6px',
+            cursor: 'pointer',
+            transition: 'all 0.15s ease',
+            zIndex: 25,
+            whiteSpace: 'nowrap',
+          }}
+          onMouseEnter={e => {
+            e.currentTarget.style.color = '#e05438';
+            e.currentTarget.style.borderColor = '#e05438';
+            e.currentTarget.style.background = 'rgba(224, 84, 56, 0.08)';
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.color = 'var(--muted)';
+            e.currentTarget.style.borderColor = 'var(--border)';
+            e.currentTarget.style.background = 'var(--surface)';
+          }}
+          title="Add a new column to the right"
+        >
+          <Plus size={13} />
+          <span>Col</span>
+        </button>
       )}
     </>
   );
 }
+
 

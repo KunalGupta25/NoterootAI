@@ -104,38 +104,60 @@ export default function AIChatPage() {
       });
 
       if (!res.ok) {
-        throw new Error(await res.text());
+        const errText = await res.text().catch(() => '');
+        throw new Error(errText || `Server returned HTTP ${res.status}`);
       }
 
-      const data = await res.json();
-      const assistantText = data.reply || data.choices?.[0]?.message?.content || 'No response generated.';
+      let assistantText = '';
+      const contentType = res.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        const data = await res.json();
+        assistantText = data.reply || data.choices?.[0]?.message?.content || data.content || '';
+      } else {
+        assistantText = await res.text();
+      }
+
+      if (assistantText.startsWith('\n\n[Error from')) {
+        assistantText = `⚠️ ${assistantText.trim()}`;
+      }
+
+      if (!assistantText.trim()) {
+        assistantText = 'No response generated.';
+      }
+
       setMessages([...newMsgs, { role: 'assistant', content: assistantText }]);
       chatStore.addMessage(chatId, { role: 'assistant', content: assistantText, timestamp: Date.now() });
-    } catch {
-      // Real vault fallback synthesis
-      let fallback = '';
-      if (chosenNote) {
-        const cleanSnippet = (chosenNote.content || '').replace(/<[^>]+>/g, ' ').slice(0, 300);
-        fallback = `Referenced your note **${chosenNote.title}**:\n\n> "${cleanSnippet.trim() || 'No text content found in note'}..."\n\n*Configure an AI API key in Settings for open generative answers.*`;
+    } catch (err: any) {
+      if (hasApiKey || activeProvider === 'openrouter') {
+        const errMsg = `⚠️ AI Error: ${err.message || 'Could not reach AI provider. Please verify your API key in Settings.'}`;
+        setMessages([...newMsgs, { role: 'assistant', content: errMsg }]);
+        chatStore.addMessage(chatId, { role: 'assistant', content: errMsg, timestamp: Date.now() });
       } else {
-        const matchingNotes = notes.filter(n =>
-          n.title.toLowerCase().includes(userMsg.toLowerCase()) ||
-          (n.content && n.content.toLowerCase().includes(userMsg.toLowerCase()))
-        );
-
-        if (matchingNotes.length > 0) {
-          const topNote = matchingNotes[0];
-          const cleanSnippet = topNote.content.replace(/<[^>]+>/g, ' ').slice(0, 260);
-          fallback = `Found relevant content in your note **${topNote.title}**:\n\n> "${cleanSnippet.trim()}..."\n\n*Configure an AI API key in Settings for full generative answers.*`;
-        } else if (notes.length > 0) {
-          fallback = `I searched your vault across ${notes.length} note(s). No direct match was found for "${userMsg}". Configure an AI API key in Settings to enable open-ended generation.`;
+        // Real vault fallback synthesis when no API key configured
+        let fallback = '';
+        if (chosenNote) {
+          const cleanSnippet = (chosenNote.content || '').replace(/<[^>]+>/g, ' ').slice(0, 300);
+          fallback = `Referenced your note **${chosenNote.title}**:\n\n> "${cleanSnippet.trim() || 'No text content found in note'}..."\n\n*Configure an AI API key in Settings for open generative answers.*`;
         } else {
-          fallback = `Your vault currently has no notes to reference. Create a note or add the Tutorial Guide from the Dashboard!`;
-        }
-      }
+          const matchingNotes = notes.filter(n =>
+            n.title.toLowerCase().includes(userMsg.toLowerCase()) ||
+            (n.content && n.content.toLowerCase().includes(userMsg.toLowerCase()))
+          );
 
-      setMessages([...newMsgs, { role: 'assistant', content: fallback }]);
-      chatStore.addMessage(chatId, { role: 'assistant', content: fallback, timestamp: Date.now() });
+          if (matchingNotes.length > 0) {
+            const topNote = matchingNotes[0];
+            const cleanSnippet = topNote.content.replace(/<[^>]+>/g, ' ').slice(0, 260);
+            fallback = `Found relevant content in your note **${topNote.title}**:\n\n> "${cleanSnippet.trim()}..."\n\n*Configure an AI API key in Settings for full generative answers.*`;
+          } else if (notes.length > 0) {
+            fallback = `I searched your vault across ${notes.length} note(s). No direct match was found for "${userMsg}". Configure an AI API key in Settings to enable open-ended generation.`;
+          } else {
+            fallback = `Your vault currently has no notes to reference. Create a note or add the Tutorial Guide from the Dashboard!`;
+          }
+        }
+
+        setMessages([...newMsgs, { role: 'assistant', content: fallback }]);
+        chatStore.addMessage(chatId, { role: 'assistant', content: fallback, timestamp: Date.now() });
+      }
     } finally {
       setLoading(false);
     }

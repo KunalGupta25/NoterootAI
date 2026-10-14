@@ -106,7 +106,7 @@ export const useSettingsStore = create<SettingsState>()(
       // ── Model selection ────────────────────────────────────────
       providerModels: {
         openai: 'gpt-4o-mini',
-        gemini: 'gemini-3.5-flash',
+        gemini: 'gemini-2.0-flash',
         mistral: 'mistral-large-latest',
         groq: 'llama-3.3-70b-versatile',
         openrouter: 'deepseek/deepseek-r1',
@@ -332,9 +332,14 @@ export const useSettingsStore = create<SettingsState>()(
           delete persisted.providerModels?.anthropic;
           if (persisted.activeProvider === 'anthropic') persisted.activeProvider = 'gemini';
         }
+        if (version < 5 && persisted) {
+          if (persisted.providerModels?.gemini === 'gemini-3.5-flash') {
+            persisted.providerModels.gemini = 'gemini-2.0-flash';
+          }
+        }
         return persisted;
       },
-      version: 4,
+      version: 5,
     }
   )
 );

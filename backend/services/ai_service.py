@@ -81,11 +81,20 @@ async def chat(request: ChatRequest):
     if request.context_note_content:
         context.append(BeautifulSoup(request.context_note_content, "html.parser").get_text(separator="\n\n", strip=True)[:4000])
     if request.use_vault and request.messages:
-        matches = await search_notes(SearchRequest(query=request.messages[-1].content, provider=request.provider, api_key=request.api_key, custom_base_url=request.custom_base_url))
-        context.extend(item.excerpt for item in matches.results)
+        try:
+            matches = await search_notes(SearchRequest(query=request.messages[-1].content, provider=request.provider, api_key=request.api_key, custom_base_url=request.custom_base_url))
+            context.extend(item.excerpt for item in matches.results)
+        except Exception:
+            # Vault search unavailable or no indexed notes; proceed with normal conversation
+            pass
     messages = list(request.messages)
     if context:
         from schemas.ai import Message
         messages.insert(0, Message(role="system", content="Answer using the following vault context:\n\n" + "\n\n".join(context)))
-    async for chunk in provider.chat(messages, request.model, request.temperature, request.max_tokens):
-        yield chunk
+    try:
+        async for chunk in provider.chat(messages, request.model, request.temperature, request.max_tokens):
+            yield chunk
+    except Exception as err:
+        import logging
+        logging.exception("Chat generation error: %s", err)
+        yield f"\n\n[Error from {request.provider}: {str(err)}]"

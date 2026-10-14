@@ -562,7 +562,13 @@ export default function SettingsPage() {
                             <input
                               type="password"
                               value={currentKey}
-                              onChange={e => setProviderKey(pId, e.target.value)}
+                              onChange={e => {
+                                const val = e.target.value;
+                                setProviderKey(pId, val);
+                                if (val && !providerKeys[activeProvider as keyof typeof providerKeys]) {
+                                  setActiveProvider(pId);
+                                }
+                              }}
                               placeholder={p.keyPlaceholder}
                               style={{ ...inputStyle, padding: '7px 10px', fontSize: '12.5px' }}
                             />

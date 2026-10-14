@@ -23,7 +23,7 @@ export const BUILTIN_PROVIDERS: Record<BuiltinProvider, ProviderInfo> = {
     label: 'Google Gemini',
     icon: '✨',
     color: '#4285f4',
-    models: ['gemini-3.5-flash', 'gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-pro', 'gemini-1.5-flash'],
+    models: ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.0-flash-lite'],
     keyPlaceholder: 'AIza...',
     keyUrl: 'https://aistudio.google.com/app/apikey',
   },

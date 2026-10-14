@@ -255,6 +255,18 @@ export default function NoteEditorPage() {
     try {
       const apiKey = providerKeys[activeProvider as keyof typeof providerKeys] || '';
       const custom = customProviders.find(c => c.id === activeProvider);
+      const effectiveKey = apiKey || custom?.apiKey || '';
+
+      if (!effectiveKey && activeProvider !== 'openrouter' && !custom?.baseUrl) {
+        setAiChatMessages(prev => [
+          ...prev,
+          {
+            role: 'assistant',
+            text: `⚠️ No API key set for "${activeProvider}". Please go to Settings → AI & Models to configure your key and ensure "${activeProvider}" is set as the active engine.`,
+          },
+        ]);
+        return;
+      }
 
       const res = await fetch(`${AI_URL}/chat`, {
         method: 'POST',
@@ -269,30 +281,48 @@ export default function NoteEditorPage() {
           ],
           provider: isBuiltinProvider(activeProvider) ? activeProvider : 'custom',
           model: getProviderModel(activeProvider),
-          api_key: apiKey || custom?.apiKey,
+          api_key: effectiveKey,
           custom_base_url: custom?.baseUrl,
         }),
       });
 
       if (res.ok) {
-        const data = await res.json();
-        const reply = data.reply || data.choices?.[0]?.message?.content || 'Completed.';
-        setAiChatMessages(prev => [...prev, { role: 'assistant', text: reply }]);
+        let reply = '';
+        const contentType = res.headers.get('content-type') || '';
+        if (contentType.includes('application/json')) {
+          const data = await res.json();
+          reply = data.reply || data.choices?.[0]?.message?.content || data.content || '';
+        } else {
+          reply = await res.text();
+        }
+
+        if (reply.startsWith('\n\n[Error from')) {
+          setAiChatMessages(prev => [
+            ...prev,
+            {
+              role: 'assistant',
+              text: `⚠️ ${reply.trim()}`,
+            },
+          ]);
+        } else {
+          setAiChatMessages(prev => [...prev, { role: 'assistant', text: reply.trim() || 'Completed with no output.' }]);
+        }
       } else {
+        const errorText = await res.text().catch(() => '');
         setAiChatMessages(prev => [
           ...prev,
           {
             role: 'assistant',
-            text: `⚠️ Could not reach the AI service. Make sure your API key is configured in Settings and the AI service is running.`,
+            text: `⚠️ AI request failed (${res.status}): ${errorText || 'Please check your API key and provider in Settings.'}`,
           },
         ]);
       }
-    } catch {
+    } catch (err: any) {
       setAiChatMessages(prev => [
         ...prev,
         {
           role: 'assistant',
-          text: `⚠️ AI service is not reachable. Add an API key in Settings → AI Provider to enable this feature.`,
+          text: `⚠️ AI service error: ${err.message || 'Make sure the backend is running.'}`,
         },
       ]);
     } finally {

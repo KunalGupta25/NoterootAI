@@ -105,6 +105,7 @@ export const useSettingsStore = create<SettingsState>()(
         gemini: 'gemini-3.5-flash',
         mistral: 'mistral-large-latest',
         groq: 'llama-3.3-70b-versatile',
+        openrouter: 'deepseek/deepseek-r1',
       },
       setProviderModel: (provider, model) =>
         set((s) => ({ providerModels: { ...s.providerModels, [provider]: model } })),
@@ -180,8 +181,17 @@ export const useSettingsStore = create<SettingsState>()(
       },
 
       isActiveProviderConfigured: () => {
-        const key = get().getActiveApiKey();
-        return key.trim().length > 0;
+        const state = get();
+        const { activeProvider } = state;
+        if (activeProvider in BUILTIN_PROVIDERS) {
+          const key = state.providerKeys[activeProvider as BuiltinProvider] ?? '';
+          return key.trim().length > 0;
+        }
+        const custom = state.customProviders.find((c) => c.id === activeProvider);
+        if (custom) {
+          return custom.baseUrl.trim().length > 0;
+        }
+        return false;
       },
 
       getConfiguredProviders: () => {

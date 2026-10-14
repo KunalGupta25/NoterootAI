@@ -1,181 +1,69 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useChatStore } from '../stores/chatStore';
-import { BUILTIN_PROVIDERS, isBuiltinProvider } from '../lib/providerConfig';
+import { isBuiltinProvider } from '../lib/providerConfig';
 import { AI_URL } from '../lib/constants';
 import {
-  Sparkles, Send, User, Bot, AlertCircle, Database,
-  Trash2, Copy, Check, Plus, ChevronDown, MessageSquare, X
+  Sparkles, Send, Search,
+  Paperclip, Copy, Check, Bot, AlertTriangle, Settings as SettingsIcon
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { CodeBlock } from '../components/Markdown/CodeBlock';
 import { useNoteStore } from '../stores/noteStore';
+import { Link } from 'react-router-dom';
 
-interface LocalMessage { role: 'user' | 'assistant'; content: string; }
-
-function ProviderModelBar({
-  provider, model, onProviderChange, onModelChange,
-}: {
-  provider: string; model: string;
-  onProviderChange: (p: string) => void; onModelChange: (m: string) => void;
-}) {
-  const { providerKeys, customProviders } = useSettingsStore();
-  const [showPicker, setShowPicker] = useState(false);
-  const [showModelPicker, setShowModelPicker] = useState(false);
-  const [customModelInput, setCustomModelInput] = useState('');
-  const [addingModel, setAddingModel] = useState(false);
-
-  const configuredBuiltins = Object.keys(BUILTIN_PROVIDERS).filter(
-    (p) => (providerKeys[p as keyof typeof providerKeys] ?? '').length > 0
-  );
-  const allProviders = [...configuredBuiltins, ...customProviders.map((c) => c.id)];
-
-  const getProviderLabel = (p: string) => {
-    if (isBuiltinProvider(p)) return BUILTIN_PROVIDERS[p].label;
-    return customProviders.find((c) => c.id === p)?.name ?? p;
-  };
-  const getProviderIcon = (p: string) => {
-    if (isBuiltinProvider(p)) return BUILTIN_PROVIDERS[p].icon;
-    return '🔌';
-  };
-  const getModels = (p: string): string[] => {
-    if (isBuiltinProvider(p)) return BUILTIN_PROVIDERS[p].models;
-    return customProviders.find((c) => c.id === p)?.models ?? [];
-  };
-
-  const models = getModels(provider);
-
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-      {/* Provider Pill */}
-      <div style={{ position: 'relative' }}>
-        <button onClick={() => { setShowPicker(!showPicker); setShowModelPicker(false); }}
-          style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '5px 10px', border: '1px solid var(--border)', borderRadius: '20px', background: 'var(--surface)', cursor: 'pointer', fontSize: '12px', color: 'var(--fg)', fontWeight: 500 }}>
-          <span>{getProviderIcon(provider)}</span>
-          {getProviderLabel(provider)}
-          <ChevronDown size={11} />
-        </button>
-        {showPicker && (
-          <div style={{ position: 'absolute', top: '110%', left: 0, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '8px', minWidth: '160px', zIndex: 100, boxShadow: '0 8px 24px rgba(0,0,0,0.15)', overflow: 'hidden' }}>
-            {allProviders.length === 0 ? (
-              <div style={{ padding: '12px', fontSize: '12px', color: 'var(--muted)' }}>No providers configured. Go to Settings.</div>
-            ) : allProviders.map((p) => (
-              <button key={p} onClick={() => { onProviderChange(p); setShowPicker(false); }}
-                style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '8px', padding: '9px 12px', background: p === provider ? 'var(--bg)' : 'transparent', border: 'none', cursor: 'pointer', fontSize: '13px', color: 'var(--fg)', textAlign: 'left' }}>
-                <span>{getProviderIcon(p)}</span> {getProviderLabel(p)}
-                {p === provider && <Check size={11} style={{ marginLeft: 'auto', color: 'var(--accent)' }} />}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Model Pill */}
-      <div style={{ position: 'relative' }}>
-        <button onClick={() => { setShowModelPicker(!showModelPicker); setShowPicker(false); }}
-          style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '5px 10px', border: '1px solid var(--border)', borderRadius: '20px', background: 'var(--surface)', cursor: 'pointer', fontSize: '12px', color: 'var(--muted)', fontFamily: 'var(--font-mono)' }}>
-          {model || 'select model'}
-          <ChevronDown size={11} />
-        </button>
-        {showModelPicker && (
-          <div style={{ position: 'absolute', top: '110%', left: 0, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '8px', minWidth: '200px', zIndex: 100, boxShadow: '0 8px 24px rgba(0,0,0,0.15)', overflow: 'hidden' }}>
-            {models.map((m) => (
-              <button key={m} onClick={() => { onModelChange(m); setShowModelPicker(false); }}
-                style={{ width: '100%', display: 'flex', alignItems: 'center', padding: '8px 12px', background: m === model ? 'var(--bg)' : 'transparent', border: 'none', cursor: 'pointer', fontSize: '12px', fontFamily: 'var(--font-mono)', color: 'var(--fg)', textAlign: 'left', gap: '8px' }}>
-                {m} {m === model && <Check size={11} style={{ marginLeft: 'auto', color: 'var(--accent)' }} />}
-              </button>
-            ))}
-            {/* Add custom model */}
-            {addingModel ? (
-              <div style={{ padding: '8px', borderTop: '1px solid var(--border)', display: 'flex', gap: '4px' }}>
-                <input autoFocus value={customModelInput} onChange={(e) => setCustomModelInput(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') { onModelChange(customModelInput.trim()); setCustomModelInput(''); setAddingModel(false); setShowModelPicker(false); } if (e.key === 'Escape') setAddingModel(false); }}
-                  placeholder="custom-model-name"
-                  style={{ flex: 1, background: 'var(--bg)', border: '1px solid var(--accent)', borderRadius: '4px', padding: '5px 8px', fontSize: '11px', fontFamily: 'var(--font-mono)', color: 'var(--fg)', outline: 'none' }} />
-              </div>
-            ) : (
-              <button onClick={() => setAddingModel(true)}
-                style={{ width: '100%', padding: '8px 12px', border: 'none', borderTop: '1px solid var(--border)', background: 'transparent', color: 'var(--muted)', cursor: 'pointer', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <Plus size={11} /> Add custom model…
-              </button>
-            )}
-          </div>
-        )}
-      </div>
-    </div>
-  );
+interface LocalMessage {
+  role: 'user' | 'assistant';
+  content: string;
 }
 
-function MessageBubble({ msg }: { msg: LocalMessage }) {
-  const [copied, setCopied] = useState(false);
-  const handleCopy = () => {
-    navigator.clipboard.writeText(msg.content);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  return (
-    <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start', maxWidth: msg.role === 'user' ? '70%' : '100%', marginLeft: msg.role === 'user' ? 'auto' : 0, width: msg.role === 'assistant' ? '100%' : 'auto' }}>
-      {msg.role === 'assistant' && (
-        <div style={{ width: '30px', height: '30px', borderRadius: '8px', background: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', flexShrink: 0, marginTop: '2px' }}>
-          <Sparkles size={14} />
-        </div>
-      )}
-      <div style={{ flex: 1, position: 'relative' }} className="group">
-        <div style={{ padding: '12px 48px 12px 16px', background: msg.role === 'user' ? 'var(--surface)' : 'transparent', border: msg.role === 'user' ? '1px solid var(--border)' : 'none', borderRadius: msg.role === 'user' ? '12px 12px 0 12px' : '0', fontSize: '14px', lineHeight: 1.7, color: 'var(--fg)' }} className="prose">
-          {msg.role === 'user' ? msg.content : <ReactMarkdown components={{ code: CodeBlock }}>{msg.content}</ReactMarkdown>}
-        </div>
-        <button className="copy-btn" onClick={handleCopy} title="Copy" style={{ position: 'absolute', top: '12px', right: '12px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '5px', padding: '4px', cursor: 'pointer', color: copied ? '#22c55e' : 'var(--muted)', display: 'flex', alignItems: 'center', gap: '3px', fontSize: '11px', opacity: copied ? 1 : 0, transition: 'opacity 0.2s' }}>
-          {copied ? <Check size={14} /> : <Copy size={14} />}
-        </button>
-      </div>
-      {msg.role === 'user' && (
-        <div style={{ width: '30px', height: '30px', borderRadius: '8px', background: 'var(--surface)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--muted)', flexShrink: 0, marginTop: '2px' }}>
-          <User size={14} />
-        </div>
-      )}
-    </div>
-  );
-}
+const STARTER_PROMPTS = [
+  'What are the key learnings from my RAG notes?',
+  'Summarize the meeting notes from last week.',
+  'Compare these two documents.',
+  'Find notes related to image processing.',
+];
 
 export default function AIChatPage() {
   const settingsStore = useSettingsStore();
   const chatStore = useChatStore();
   const { notes } = useNoteStore();
 
-  const [activeProvider, setActiveProvider] = useState(settingsStore.activeProvider);
-  const [activeModel, setActiveModel] = useState(settingsStore.getProviderModel(settingsStore.activeProvider));
+  const [scope, setScope] = useState<'global' | 'selected'>('global');
   const [messages, setMessages] = useState<LocalMessage[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const [showHistory, setShowHistory] = useState(false);
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
+  const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
+  const [showAttachPicker, setShowAttachPicker] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
+  const activeProvider = settingsStore.activeProvider;
+  const activeModel = settingsStore.getProviderModel(activeProvider);
+  const hasApiKey = settingsStore.isActiveProviderConfigured();
+
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, loading]);
 
   const getApiInfo = useCallback(() => {
     const { providerKeys, customProviders } = useSettingsStore.getState();
     if (isBuiltinProvider(activeProvider)) {
       return { apiKey: providerKeys[activeProvider] ?? '', customBaseUrl: undefined };
     }
-    const custom = customProviders.find((c) => c.id === activeProvider);
+    const custom = customProviders.find(c => c.id === activeProvider);
     return { apiKey: custom?.apiKey ?? '', customBaseUrl: custom?.baseUrl };
   }, [activeProvider]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!input.trim() || loading) return;
-    const { apiKey, customBaseUrl } = getApiInfo();
-    if (!apiKey && !customBaseUrl) return;
+  const sendMessage = async (text: string) => {
+    if (!text.trim() || loading) return;
 
-    const userMsg = input.trim();
+    const userMsg = text.trim();
     setInput('');
     const newMsgs: LocalMessage[] = [...messages, { role: 'user', content: userMsg }];
     setMessages(newMsgs);
     setLoading(true);
 
-    // Create conversation if needed
     let chatId = activeChatId;
     if (!chatId) {
       chatId = chatStore.createConversation(activeProvider, activeModel);
@@ -184,6 +72,7 @@ export default function AIChatPage() {
     chatStore.addMessage(chatId, { role: 'user', content: userMsg, timestamp: Date.now() });
 
     try {
+      const { apiKey, customBaseUrl } = getApiInfo();
       const res = await fetch(`${AI_URL}/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -197,155 +86,479 @@ export default function AIChatPage() {
         }),
       });
 
-      if (!res.ok) throw new Error(await res.text());
-      if (!res.body) throw new Error('No response body');
-
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      setMessages((prev) => [...prev, { role: 'assistant', content: '' }]);
-
-      let fullContent = '';
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        const chunk = decoder.decode(value, { stream: true });
-        fullContent += chunk;
-        setMessages((prev) => {
-          const next = [...prev];
-          const last = { ...next[next.length - 1] };
-          last.content = fullContent;
-          next[next.length - 1] = last;
-          return next;
-        });
+      if (!res.ok) {
+        throw new Error(await res.text());
       }
 
-      chatStore.addMessage(chatId, { role: 'assistant', content: fullContent, timestamp: Date.now() });
-    } catch (err) {
-      console.error(err);
-      setMessages((prev) => [...prev, { role: 'assistant', content: `⚠ AI service error: ${err instanceof Error ? err.message : String(err)}` }]);
+      const data = await res.json();
+      const assistantText = data.reply || data.choices?.[0]?.message?.content || 'No response generated.';
+      setMessages([...newMsgs, { role: 'assistant', content: assistantText }]);
+      chatStore.addMessage(chatId, { role: 'assistant', content: assistantText, timestamp: Date.now() });
+    } catch {
+      // Real vault fallback synthesis
+      let fallback = '';
+      const matchingNotes = notes.filter(n =>
+        n.title.toLowerCase().includes(userMsg.toLowerCase()) ||
+        (n.content && n.content.toLowerCase().includes(userMsg.toLowerCase()))
+      );
+
+      if (matchingNotes.length > 0) {
+        const topNote = matchingNotes[0];
+        const cleanSnippet = topNote.content.replace(/<[^>]+>/g, ' ').slice(0, 260);
+        fallback = `Found relevant content in your note **${topNote.title}**:\n\n> "${cleanSnippet.trim()}..."\n\n*Configure an AI API key in Settings for full generative answers.*`;
+      } else if (notes.length > 0) {
+        fallback = `I searched your vault across ${notes.length} note(s). No direct match was found for "${userMsg}". Configure an AI API key in Settings to enable open-ended generation.`;
+      } else {
+        fallback = `Your vault currently has no notes to reference. Create a note or add the Tutorial Guide from the Dashboard!`;
+      }
+
+      setMessages([...newMsgs, { role: 'assistant', content: fallback }]);
+      chatStore.addMessage(chatId, { role: 'assistant', content: fallback, timestamp: Date.now() });
     } finally {
       setLoading(false);
     }
   };
 
-  const handleNewChat = () => {
-    setMessages([]);
-    setActiveChatId(null);
-    setShowHistory(false);
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    sendMessage(input);
   };
 
-  const loadConversation = (id: string) => {
-    const convo = chatStore.conversations.find((c) => c.id === id);
-    if (!convo) return;
-    setMessages(convo.messages.map((m) => ({ role: m.role, content: m.content })));
-    setActiveChatId(id);
-    setActiveProvider(convo.provider);
-    setActiveModel(convo.model);
-    setShowHistory(false);
+  const handleCopy = (content: string, index: number) => {
+    navigator.clipboard.writeText(content);
+    setCopiedIndex(index);
+    setTimeout(() => setCopiedIndex(null), 2000);
   };
-
-  const isConfigured = (() => {
-    const { apiKey, customBaseUrl } = getApiInfo();
-    return (apiKey?.trim().length ?? 0) > 0 || !!customBaseUrl;
-  })();
-
-  if (!isConfigured) {
-    return (
-      <div style={{ maxWidth: '800px', margin: '0 auto', textAlign: 'center', paddingTop: '100px' }}>
-        <div style={{ width: '64px', height: '64px', borderRadius: '32px', background: 'var(--surface)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px', color: 'var(--muted)' }}>
-          <AlertCircle size={32} />
-        </div>
-        <h1 style={{ fontSize: '24px', fontFamily: 'var(--font-display)', marginBottom: '12px' }}>AI Configuration Required</h1>
-        <p style={{ color: 'var(--muted)', fontSize: '14px', maxWidth: '360px', margin: '0 auto' }}>
-          Go to Settings → AI Providers and add at least one API key.
-        </p>
-      </div>
-    );
-  }
 
   return (
-    <div style={{ maxWidth: '960px', margin: '0 auto', display: 'flex', height: 'calc(100vh - var(--topbar-height) - 32px)' }}>
-      {/* History sidebar */}
-      {showHistory && (
-        <div style={{ width: '240px', flexShrink: 0, borderRight: '1px solid var(--border)', display: 'flex', flexDirection: 'column', overflowY: 'auto', paddingTop: '40px' }}>
-          <div style={{ padding: '0 12px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--muted)' }}>HISTORY</span>
-            <button onClick={() => chatStore.clearAll()} title="Clear all" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', padding: '2px', display: 'flex' }}><Trash2 size={12} /></button>
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100%',
+        maxWidth: '900px',
+        margin: '0 auto',
+        padding: '32px 32px 24px',
+        boxSizing: 'border-box',
+        overflow: 'hidden',
+      }}
+    >
+      {/* ── Top Header ── */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'flex-start',
+          justifyContent: 'space-between',
+          marginBottom: '20px',
+          flexShrink: 0,
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div
+            style={{
+              width: '40px',
+              height: '40px',
+              borderRadius: '50%',
+              background: hasApiKey ? 'rgba(224, 84, 56, 0.1)' : 'rgba(120,120,120,0.1)',
+              border: `1px solid ${hasApiKey ? 'rgba(224, 84, 56, 0.2)' : 'var(--border)'}`,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: hasApiKey ? '#e05438' : 'var(--muted)',
+              flexShrink: 0,
+            }}
+          >
+            <Bot size={22} />
           </div>
-          <button onClick={handleNewChat} style={{ margin: '0 8px 8px', padding: '8px 10px', border: '1px dashed var(--border)', borderRadius: '6px', background: 'transparent', color: 'var(--muted)', cursor: 'pointer', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <Plus size={12} /> New Chat
-          </button>
-          {chatStore.conversations.map((c) => (
-            <button key={c.id} onClick={() => loadConversation(c.id)}
-              style={{ padding: '8px 12px', background: c.id === activeChatId ? 'var(--bg)' : 'transparent', border: 'none', borderRadius: '6px', cursor: 'pointer', margin: '0 6px', textAlign: 'left', fontSize: '12px', color: c.id === activeChatId ? 'var(--fg)' : 'var(--muted)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <MessageSquare size={11} />
-              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{c.title}</span>
-              <button onClick={(e) => { e.stopPropagation(); chatStore.deleteConversation(c.id); if (c.id === activeChatId) handleNewChat(); }}
-                style={{ background: 'none', border: 'none', padding: '1px', cursor: 'pointer', color: 'var(--muted)', display: 'flex', opacity: 0.5, flexShrink: 0 }}><X size={10} /></button>
-            </button>
-          ))}
+          <div>
+            <h1
+              style={{
+                fontSize: '20px',
+                fontWeight: 700,
+                letterSpacing: '-0.3px',
+                margin: '0 0 3px 0',
+                color: 'var(--fg)',
+              }}
+            >
+              Chat with Your Knowledge
+            </h1>
+            <p style={{ fontSize: '13px', color: 'var(--muted)', margin: 0 }}>
+              {hasApiKey
+                ? 'Get answers from your notes, documents, and connected sources.'
+                : 'AI is disabled — no active provider or key configured.'}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* ── AI Disabled Banner ── */}
+      {!hasApiKey && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+            padding: '14px 18px',
+            background: 'rgba(234,179,8,0.08)',
+            border: '1px solid rgba(234,179,8,0.25)',
+            borderRadius: '8px',
+            marginBottom: '20px',
+            flexShrink: 0,
+          }}
+        >
+          <AlertTriangle size={18} style={{ color: '#eab308', flexShrink: 0 }} />
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: '13.5px', fontWeight: 600, color: 'var(--fg)', marginBottom: '2px' }}>
+              AI Disabled — No Provider Configured
+            </div>
+            <div style={{ fontSize: '12.5px', color: 'var(--muted)' }}>
+              Configure OpenRouter, OpenAI, Gemini, or a local endpoint (Ollama/LM Studio) in Settings. Vault search still works.
+            </div>
+          </div>
+          <Link
+            to="/settings"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '6px 14px',
+              background: '#eab308',
+              color: '#000',
+              borderRadius: '6px',
+              fontSize: '12.5px',
+              fontWeight: 600,
+              textDecoration: 'none',
+              flexShrink: 0,
+            }}
+          >
+            <SettingsIcon size={14} /> Go to Settings
+          </Link>
         </div>
       )}
 
-      {/* Main chat area */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-        {/* Header */}
-        <div style={{ padding: '32px 48px 16px', flexShrink: 0, borderBottom: '1px solid var(--border)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px', marginBottom: '10px' }}>
-            <div>
-              <div className="mono kicker" style={{ marginBottom: '4px' }}>Ask your Vault</div>
-              <h1 style={{ fontSize: '26px', fontFamily: 'var(--font-display)', margin: '0' }}>Knowledge Chat</h1>
+      {/* ── Knowledge Scope Tabs ── */}
+      <div
+        style={{
+          display: 'flex',
+          gap: '8px',
+          marginBottom: '24px',
+          flexShrink: 0,
+        }}
+      >
+        <button
+          onClick={() => setScope('global')}
+          style={{
+            padding: '6px 14px',
+            borderRadius: '6px',
+            fontSize: '13px',
+            fontWeight: 500,
+            cursor: 'pointer',
+            border: '1px solid',
+            borderColor: scope === 'global' ? '#e05438' : 'var(--border)',
+            background: scope === 'global' ? 'rgba(224, 84, 56, 0.1)' : 'var(--surface)',
+            color: scope === 'global' ? '#e05438' : 'var(--muted)',
+            transition: 'all 0.15s',
+          }}
+        >
+          Global Knowledge
+        </button>
+        <button
+          onClick={() => setScope('selected')}
+          style={{
+            padding: '6px 14px',
+            borderRadius: '6px',
+            fontSize: '13px',
+            fontWeight: 500,
+            cursor: 'pointer',
+            border: '1px solid',
+            borderColor: scope === 'selected' ? '#e05438' : 'var(--border)',
+            background: scope === 'selected' ? 'rgba(224, 84, 56, 0.1)' : 'var(--surface)',
+            color: scope === 'selected' ? '#e05438' : 'var(--muted)',
+            transition: 'all 0.15s',
+          }}
+        >
+          Selected Folder / File
+        </button>
+      </div>
+
+      {/* ── Chat Messages Scroll Area ── */}
+      <div
+        style={{
+          flex: 1,
+          overflowY: 'auto',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '16px',
+          paddingRight: '6px',
+          marginBottom: '16px',
+        }}
+      >
+        {messages.length === 0 ? (
+          /* Starter Prompt Cards */
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '10px',
+              marginTop: '12px',
+            }}
+          >
+            {STARTER_PROMPTS.map((promptText, i) => (
+              <div
+                key={i}
+                onClick={() => sendMessage(promptText)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '12px',
+                  padding: '14px 16px',
+                  background: 'var(--surface)',
+                  border: '1px solid var(--border)',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  color: 'var(--fg)',
+                  fontSize: '13.5px',
+                  transition: 'background 0.12s, border-color 0.12s',
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.borderColor = '#e05438';
+                  e.currentTarget.style.background = 'var(--surface-2)';
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.borderColor = 'var(--border)';
+                  e.currentTarget.style.background = 'var(--surface)';
+                }}
+              >
+                <Search size={16} style={{ color: 'var(--muted)', flexShrink: 0 }} />
+                <span>{promptText}</span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          messages.map((msg, idx) => (
+            <div
+              key={idx}
+              style={{
+                display: 'flex',
+                gap: '12px',
+                alignItems: 'flex-start',
+                maxWidth: msg.role === 'user' ? '80%' : '100%',
+                marginLeft: msg.role === 'user' ? 'auto' : 0,
+              }}
+            >
+              {msg.role === 'assistant' && (
+                <div
+                  style={{
+                    width: '32px',
+                    height: '32px',
+                    borderRadius: '8px',
+                    background: 'rgba(224, 84, 56, 0.12)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#e05438',
+                    flexShrink: 0,
+                    marginTop: '2px',
+                  }}
+                >
+                  <Sparkles size={16} />
+                </div>
+              )}
+              <div
+                style={{
+                  flex: 1,
+                  position: 'relative',
+                  padding: '12px 16px',
+                  borderRadius: msg.role === 'user' ? '12px 12px 2px 12px' : '10px',
+                  background: msg.role === 'user' ? '#e05438' : 'var(--surface)',
+                  color: msg.role === 'user' ? '#ffffff' : 'var(--fg)',
+                  border: msg.role === 'user' ? 'none' : '1px solid var(--border)',
+                  fontSize: '14px',
+                  lineHeight: 1.6,
+                }}
+              >
+                {msg.role === 'user' ? (
+                  msg.content
+                ) : (
+                  <>
+                    <ReactMarkdown components={{ code: CodeBlock }}>
+                      {msg.content}
+                    </ReactMarkdown>
+                    <button
+                      onClick={() => handleCopy(msg.content, idx)}
+                      title="Copy response"
+                      style={{
+                        position: 'absolute',
+                        top: '8px',
+                        right: '8px',
+                        background: 'transparent',
+                        border: 'none',
+                        color: copiedIndex === idx ? '#22c55e' : 'var(--muted)',
+                        cursor: 'pointer',
+                        padding: '4px',
+                      }}
+                    >
+                      {copiedIndex === idx ? <Check size={14} /> : <Copy size={14} />}
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', fontSize: '12px', color: 'var(--muted)' }}>
-              <Database size={13} /> {notes.length} pages indexed
-              <button onClick={() => setShowHistory(!showHistory)} title="History" style={{ padding: '5px 10px', border: '1px solid var(--border)', borderRadius: '6px', background: showHistory ? 'var(--bg)' : 'transparent', color: 'var(--muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px' }}>
-                <MessageSquare size={12} /> History
-              </button>
-              {messages.length > 0 && (
-                <button onClick={handleNewChat} title="New chat" style={{ padding: '5px 10px', border: '1px solid var(--border)', borderRadius: '6px', background: 'transparent', color: 'var(--muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px' }}>
-                  <Plus size={12} /> New
-                </button>
+          ))
+        )}
+
+        {loading && (
+          <div style={{ display: 'flex', gap: '12px', alignItems: 'center', padding: '8px 0' }}>
+            <div
+              style={{
+                width: '32px',
+                height: '32px',
+                borderRadius: '8px',
+                background: 'rgba(224, 84, 56, 0.12)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#e05438',
+              }}
+            >
+              <Sparkles size={16} />
+            </div>
+            <span style={{ fontSize: '13px', color: 'var(--muted)' }}>Synthesizing knowledge...</span>
+          </div>
+        )}
+        <div ref={endRef} />
+      </div>
+
+      {/* ── Bottom Input Bar matching Mockup ── */}
+      <form
+        onSubmit={handleSubmit}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          background: 'var(--surface)',
+          border: '1px solid var(--border)',
+          borderRadius: '8px',
+          padding: '8px 12px',
+          flexShrink: 0,
+          position: 'relative',
+        }}
+      >
+        <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+          <button
+            type="button"
+            onClick={() => setShowAttachPicker(!showAttachPicker)}
+            title="Attach note from vault"
+            style={{
+              background: showAttachPicker ? 'rgba(224,84,56,0.1)' : 'transparent',
+              border: 'none',
+              color: showAttachPicker ? '#e05438' : 'var(--muted)',
+              cursor: 'pointer',
+              padding: '4px',
+              borderRadius: '4px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+            }}
+          >
+            <Paperclip size={18} />
+          </button>
+
+          {showAttachPicker && (
+            <div
+              style={{
+                position: 'absolute',
+                bottom: '100%',
+                left: 0,
+                marginBottom: '10px',
+                width: '260px',
+                maxHeight: '220px',
+                overflowY: 'auto',
+                background: 'var(--surface)',
+                border: '1px solid var(--border)',
+                borderRadius: '8px',
+                boxShadow: '0 8px 24px rgba(0,0,0,0.18)',
+                zIndex: 100,
+                padding: '6px',
+              }}
+            >
+              <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--muted)', padding: '6px 8px', textTransform: 'uppercase' }}>
+                Attach Note Context
+              </div>
+              {notes.length === 0 ? (
+                <div style={{ padding: '8px', fontSize: '12.5px', color: 'var(--muted)', fontStyle: 'italic' }}>
+                  No notes in vault
+                </div>
+              ) : (
+                notes.map(n => (
+                  <button
+                    key={n._id}
+                    type="button"
+                    onClick={() => {
+                      setInput(prev => prev ? `${prev} [[${n.title}]]` : `Summarize [[${n.title}]]`);
+                      setShowAttachPicker(false);
+                    }}
+                    style={{
+                      width: '100%',
+                      textAlign: 'left',
+                      padding: '7px 8px',
+                      background: 'transparent',
+                      border: 'none',
+                      borderRadius: '4px',
+                      fontSize: '13px',
+                      color: 'var(--fg)',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                    }}
+                    onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-2)')}
+                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                  >
+                    <span>{n.icon || '📄'}</span>
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{n.title || 'Untitled'}</span>
+                  </button>
+                ))
               )}
             </div>
-          </div>
-          <ProviderModelBar provider={activeProvider} model={activeModel} onProviderChange={(p) => { setActiveProvider(p); useSettingsStore.getState().setActiveProvider(p); setActiveModel(useSettingsStore.getState().getProviderModel(p)); }} onModelChange={(m) => { setActiveModel(m); useSettingsStore.getState().setProviderModel(activeProvider, m); }} />
-        </div>
-
-        {/* Messages */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '24px 48px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          {messages.length === 0 ? (
-            <div style={{ margin: 'auto', textAlign: 'center', color: 'var(--muted)' }}>
-              <div style={{ width: '72px', height: '72px', borderRadius: '36px', background: 'var(--surface)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px', color: 'var(--accent)' }}>
-                <Bot size={36} />
-              </div>
-              <div style={{ fontSize: '18px', fontWeight: 500, color: 'var(--fg)', marginBottom: '10px' }}>How can I help you today?</div>
-              <div style={{ fontSize: '13px', maxWidth: '380px', margin: '0 auto', lineHeight: 1.7 }}>Ask me anything about your vault — I'll search your notes and answer with context.</div>
-            </div>
-          ) : messages.map((m, i) => <MessageBubble key={i} msg={m} />)}
-          {loading && (
-            <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-              <div style={{ width: '30px', height: '30px', borderRadius: '8px', background: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', flexShrink: 0 }}>
-                <Sparkles size={14} />
-              </div>
-              <div style={{ padding: '12px 16px', fontSize: '14px', color: 'var(--muted)' }}>Thinking…</div>
-            </div>
           )}
-          <div ref={endRef} />
         </div>
-
-        {/* Input */}
-        <div style={{ padding: '12px 48px 32px', flexShrink: 0 }}>
-          <form onSubmit={handleSubmit} style={{ display: 'flex', gap: '10px', alignItems: 'center', background: 'var(--surface)', border: '1px solid var(--border)', padding: '8px 8px 8px 16px', borderRadius: '12px', boxShadow: '0 4px 20px rgba(0,0,0,0.05)' }}>
-            <input type="text" value={input} onChange={(e) => setInput(e.target.value)}
-              placeholder="Ask a question about your knowledge base…"
-              disabled={loading}
-              style={{ border: 'none', background: 'transparent', outline: 'none', fontSize: '14px', flex: 1, color: 'var(--fg)', fontFamily: 'var(--font-body)' }} />
-            <button type="submit" disabled={!input.trim() || loading} style={{ background: input.trim() ? 'var(--accent)' : 'var(--bg)', border: 'none', padding: '10px', borderRadius: '8px', color: input.trim() ? 'white' : 'var(--muted)', cursor: input.trim() ? 'pointer' : 'default', display: 'flex', transition: 'all 0.2s' }}>
-              <Send size={16} />
-            </button>
-          </form>
-        </div>
-      </div>
+        <input
+          type="text"
+          value={input}
+          onChange={e => setInput(e.target.value)}
+          placeholder="Ask a question about your knowledge..."
+          style={{
+            flex: 1,
+            border: 'none',
+            outline: 'none',
+            background: 'transparent',
+            color: 'var(--fg)',
+            fontSize: '13.5px',
+          }}
+        />
+        <button
+          type="submit"
+          disabled={loading || !input.trim()}
+          style={{
+            width: '32px',
+            height: '32px',
+            borderRadius: '6px',
+            background: '#e05438',
+            color: '#ffffff',
+            border: 'none',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: loading || !input.trim() ? 'not-allowed' : 'pointer',
+            opacity: loading || !input.trim() ? 0.6 : 1,
+            flexShrink: 0,
+          }}
+        >
+          <Send size={14} />
+        </button>
+      </form>
     </div>
   );
 }

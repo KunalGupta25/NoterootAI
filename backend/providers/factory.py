@@ -77,12 +77,13 @@ class Provider:
 
 def get_provider(name: str = "openai", api_key: str | None = None, custom_base_url: str | None = None):
     name = (name or "openai").lower()
-    if name not in {"openai", "gemini", "mistral", "groq", "custom"}:
+    if name not in {"openai", "gemini", "mistral", "groq", "openrouter", "custom"}:
         raise ValueError(f"Unsupported provider: {name}")
     endpoints = {
         "gemini": "https://generativelanguage.googleapis.com/v1beta/openai/",
         "mistral": "https://api.mistral.ai/v1",
         "groq": "https://api.groq.com/openai/v1",
+        "openrouter": "https://openrouter.ai/api/v1",
     }
     if name == "custom" or custom_base_url:
         return Provider("custom", api_key, custom_base_url)

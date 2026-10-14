@@ -1,44 +1,59 @@
-import { Link, useLocation, useNavigate, Outlet } from 'react-router-dom';
+import { Link, useLocation, Outlet } from 'react-router-dom';
 import {
-  Box, Search, CheckCircle, Edit3,
-  LayoutDashboard, Network, Bot,
-  Puzzle, Settings, Database, Cloud,
-  Plus, AlertCircle, PanelRightOpen, LogOut
+  Home, Search, Inbox, FileText, Network, Bot,
+  Puzzle, Settings, Sun, Moon,
+  PanelLeftClose, PanelLeft, HelpCircle, Plus
 } from 'lucide-react';
 import { useNoteStore } from '../../stores/noteStore';
 import { useAuthStore } from '../../stores/authStore';
-import VaultTree from './VaultTree';
-import AISidebar from '../Sidebar/AISidebar';
+import { useSettingsStore } from '../../stores/settingsStore';
 import CommandPalette from '../CommandPalette/CommandPalette';
-import { useEffect, useState } from 'react';
-import { PluginTabBar } from '../../plugins/slots/PluginTabBar';
+import OnboardingModal from '../Onboarding/OnboardingModal';
+import { useEffect, useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 export default function AppShell() {
-  const { initDB, syncStatus, notes, saveNote, retrySync } = useNoteStore();
-  const { user, logout } = useAuthStore();
+  const { initDB, notes, saveNote } = useNoteStore();
+  const { user } = useAuthStore();
+  const { theme, setTheme } = useSettingsStore();
   const location = useLocation();
   const navigate = useNavigate();
   const [paletteOpen, setPaletteOpen] = useState(false);
-  const [aiOpen, setAiOpen] = useState(true);
-  const [aiSidebarWidth, setAiSidebarWidth] = useState(300);
+  const [onboardingOpen, setOnboardingOpen] = useState(false);
 
-  // Sync CSS variable for grid column width
-  useEffect(() => {
-    document.documentElement.style.setProperty(
-      '--ai-sidebar-width',
-      aiOpen ? `${aiSidebarWidth}px` : '0px'
-    );
-  }, [aiOpen, aiSidebarWidth]);
+  // Derive unique tags from actual notes
+  const dynamicTags = useMemo(() => {
+    const tagSet = new Set<string>();
+    notes.forEach(n => (n.tags || []).forEach(t => tagSet.add(t)));
+    return Array.from(tagSet).sort();
+  }, [notes]);
+
+  const handleNewNote = async () => {
+    const id = await saveNote({ title: 'Untitled', content: '', icon: '📄', parentId: null, tags: [] });
+    navigate(`/notes/${id}`);
+  };
+
+  // Sidebar expanded / collapsed state (rail mode)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    return localStorage.getItem('noteroot_sidebar_collapsed') === 'true';
+  });
+
+  const toggleSidebarCollapse = () => {
+    setSidebarCollapsed(prev => {
+      const next = !prev;
+      localStorage.setItem('noteroot_sidebar_collapsed', String(next));
+      return next;
+    });
+  };
 
   useEffect(() => {
     initDB();
   }, [initDB]);
 
-  // Global Ctrl+K shortcut (skip when editor is focused — TipTap handles its own link shortcut)
+  // Global Ctrl+K shortcut
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
-        // If the user is typing inside the TipTap editor, let TipTap handle Ctrl+K
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
         const active = document.activeElement;
         if (active?.closest('.ProseMirror')) return;
         e.preventDefault();
@@ -49,273 +64,468 @@ export default function AppShell() {
     return () => document.removeEventListener('keydown', handler);
   }, []);
 
-
-  const handleNewNote = async () => {
-    const id = await saveNote({ title: 'Untitled', parentId: null, icon: '📄' });
-    navigate(`/notes/${id}`);
+  const isActive = (path: string) => {
+    if (path === '/') return location.pathname === '/';
+    return location.pathname.startsWith(path);
   };
 
-  const handleLogout = () => {
-    logout();
-    useNoteStore.getState().resetLocalState();
-    navigate('/auth', { replace: true });
-  };
+  const navItems = [
+    { label: 'Home', path: '/', icon: <Home size={18} /> },
+    { label: 'Search', path: '#search', icon: <Search size={18} />, isAction: () => setPaletteOpen(true) },
+    { label: 'Inbox', path: '/#inbox', icon: <Inbox size={18} /> },
+    { label: 'All Notes', path: '/notes', icon: <FileText size={18} /> },
+    { label: 'Graph View', path: '/graph', icon: <Network size={18} /> },
+    { label: 'AI Chat', path: '/chat', icon: <Bot size={18} /> },
+    { label: 'Plugins', path: '/plugins', icon: <Puzzle size={18} /> },
+  ];
 
-  const isActive = (path: string) =>
-    location.pathname === path || location.pathname.startsWith(path + '/');
 
-  const navStyle = (path: string): React.CSSProperties => ({
-    display: 'flex',
-    alignItems: 'center',
-    gap: '10px',
-    textDecoration: 'none',
-    color: isActive(path) ? 'var(--accent)' : 'var(--fg)',
-    fontWeight: isActive(path) ? 600 : 400,
-    padding: '6px 8px',
-    borderRadius: '6px',
-    background: isActive(path) ? 'var(--bg)' : 'transparent',
-    fontSize: '14px',
-    transition: 'all 0.15s',
-  });
 
-  const syncLabel = () => {
-    switch (syncStatus) {
-      case 'saving_locally':  return { icon: <Database size={12} style={{ color: 'var(--muted)' }} />, text: 'Saving...', color: 'var(--muted)' };
-      case 'saved_locally':   return { icon: <Database size={12} style={{ color: 'var(--muted)' }} />, text: 'Saved Locally', color: 'var(--muted)' };
-      case 'syncing':         return { icon: <Cloud size={12} style={{ color: 'var(--accent)' }} />, text: 'Syncing...', color: 'var(--accent)' };
-      case 'synced_to_cloud': return { icon: <CheckCircle size={12} style={{ color: '#4ade80' }} />, text: 'Synced to Cloud', color: '#4ade80' };
-      case 'offline':         return { icon: <AlertCircle size={12} style={{ color: '#f87171' }} />, text: 'Offline', color: '#f87171', canRetry: true };
-      default:                return { icon: <CheckCircle size={12} style={{ color: 'var(--muted)' }} />, text: 'Ready', color: 'var(--muted)' };
-    }
-  };
-
-  const sync = syncLabel();
+  const displayName = user?.name || user?.email?.split('@')[0] || 'User';
 
   return (
-    <div className="layout">
-      {/* ── Header ── */}
-      <header>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <Box style={{ color: 'var(--accent)' }} size={22} />
-          <span style={{ fontSize: '18px', fontWeight: 700, fontFamily: 'var(--font-display)' }}>NoteRootAI</span>
-        </div>
-
-        {/* Search — opens command palette */}
-        <button
-          onClick={() => setPaletteOpen(true)}
-          style={{
-            flex: 1, maxWidth: '420px', display: 'flex', alignItems: 'center',
-            gap: '10px', padding: '8px 14px',
-            background: 'var(--bg)', border: '1.5px solid var(--border)',
-            borderRadius: '6px', cursor: 'text', textAlign: 'left',
-            color: 'var(--muted)', fontSize: '14px', fontFamily: 'var(--font-body)',
-            transition: 'border-color 0.15s',
-          }}
-          onMouseEnter={e => (e.currentTarget.style.borderColor = 'var(--accent)')}
-          onMouseLeave={e => (e.currentTarget.style.borderColor = 'var(--border)')}
-        >
-          <Search size={15} style={{ flexShrink: 0 }} />
-          <span style={{ flex: 1 }}>Search pages...</span>
-          <kbd style={{ fontSize: '11px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '4px', padding: '1px 6px', fontFamily: 'var(--font-mono)' }}>Ctrl K</kbd>
-        </button>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <button
-            onClick={handleNewNote}
-            style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', padding: '6px 14px' }}
-          >
-            <Plus size={14} /> New Page
-          </button>
-          <span style={{ color: 'var(--muted)', fontSize: '12px', maxWidth: '160px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {user?.email}
-          </span>
-          <button onClick={handleLogout} title="Log out" style={{ background: 'none', border: 'none', color: 'var(--muted)', cursor: 'pointer', display: 'flex', padding: '4px' }}>
-            <LogOut size={18} />
-          </button>
-        </div>
-      </header>
-
-      {/* ── Plugin Tab Bar ── */}
-      <div style={{ gridColumn: '1 / -1', zIndex: 10 }}>
-        <PluginTabBar />
-      </div>
-
-      {/* ── Left Sidebar ── */}
-      <aside className="left-sidebar" style={{ display: 'flex', flexDirection: 'column', gap: 0, padding: '16px 12px', overflowY: 'auto' }}>
-        {/* Nav */}
-        <div style={{ marginBottom: '8px' }}>
-          <div className="mono kicker" style={{ fontSize: '10px', padding: '0 8px', marginBottom: '8px' }}>Navigation</div>
-          <nav style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-            <Link to="/" style={navStyle('/__dashboard__')} className="__force_exact__">
-              {/* exact match for dashboard */}
-            </Link>
-            <a
-              href="/"
-              onClick={e => { e.preventDefault(); navigate('/'); }}
-              style={{
-                display: 'flex', alignItems: 'center', gap: '10px',
-                textDecoration: 'none',
-                color: location.pathname === '/' ? 'var(--accent)' : 'var(--fg)',
-                fontWeight: location.pathname === '/' ? 600 : 400,
-                padding: '6px 8px', borderRadius: '6px',
-                background: location.pathname === '/' ? 'var(--bg)' : 'transparent',
-                fontSize: '14px', transition: 'all 0.15s',
-              }}
-            >
-              <LayoutDashboard size={16} /> Dashboard
-            </a>
-            <Link to="/graph" style={navStyle('/graph')}>
-              <Network size={16} /> Graph View
-            </Link>
-            <Link to="/chat" style={navStyle('/chat')}>
-              <Bot size={16} /> AI Chat
-            </Link>
-            <Link to="/plugins" style={navStyle('/plugins')}>
-              <Puzzle size={16} /> Plugins
-            </Link>
-            <Link to="/settings" style={navStyle('/settings')}>
-              <Settings size={16} /> Settings
-            </Link>
-          </nav>
-        </div>
-
-        {/* Divider */}
-        <div style={{ height: '1px', background: 'var(--border)', margin: '12px 0' }} />
-
-        {/* Vault tree (takes remaining space) */}
-        <div style={{ flex: 1, minHeight: 0 }}>
-          <VaultTree />
-        </div>
-      </aside>
-
-      {/* ── Main ── */}
-      <main>
-        <Outlet />
-      </main>
-
-      {/* ── Right AI Sidebar ── */}
+    <div
+      className="app-container"
+      style={{
+        display: 'flex',
+        height: '100vh',
+        width: '100vw',
+        overflow: 'hidden',
+        background: 'var(--bg)',
+        color: 'var(--fg)',
+        fontFamily: "'Inter', system-ui, -apple-system, sans-serif"
+      }}
+    >
+      {/* ══════════════════════════════════════
+          LEFT SIDEBAR (Expanded or Slim Rail)
+         ══════════════════════════════════════ */}
       <aside
-        className={`right-sidebar${aiOpen ? '' : ' collapsed'}`}
-        style={{ padding: 0, display: 'flex', flexDirection: 'column', position: 'relative' }}
+        className="sidebar"
+        style={{
+          width: sidebarCollapsed ? '56px' : '230px',
+          minWidth: sidebarCollapsed ? '56px' : '230px',
+          maxWidth: sidebarCollapsed ? '56px' : '230px',
+          background: 'var(--surface)',
+          borderRight: '1px solid var(--border)',
+          display: 'flex',
+          flexDirection: 'column',
+          transition: 'width 0.2s cubic-bezier(0.4, 0, 0.2, 1), min-width 0.2s, max-width 0.2s',
+          overflow: 'hidden',
+          zIndex: 40,
+          userSelect: 'none',
+        }}
       >
+        {/* Brand Header */}
         <div
           style={{
-            position: 'absolute',
-            left: 0,
-            top: 0,
-            bottom: 0,
-            width: '4px',
-            cursor: 'col-resize',
-            zIndex: 100,
-          }}
-          onMouseDown={(e) => {
-            e.preventDefault();
-            const startX = e.clientX;
-            const startWidth = aiSidebarWidth;
-
-            const onMouseMove = (moveEvent: MouseEvent) => {
-              const deltaX = startX - moveEvent.clientX;
-              // Limit the width between 200px and 600px
-              const newWidth = Math.max(200, Math.min(600, startWidth + deltaX));
-              setAiSidebarWidth(newWidth);
-            };
-
-            const onMouseUp = () => {
-              document.removeEventListener('mousemove', onMouseMove);
-              document.removeEventListener('mouseup', onMouseUp);
-              document.body.style.cursor = '';
-            };
-
-            document.addEventListener('mousemove', onMouseMove);
-            document.addEventListener('mouseup', onMouseUp);
-            document.body.style.cursor = 'col-resize';
-          }}
-        />
-        <AISidebar setAiOpen={setAiOpen} />
-      </aside>
-
-      {/* ── Floating re-open tab when collapsed ── */}
-      {!aiOpen && (
-        <button
-          onClick={() => setAiOpen(true)}
-          title="Open AI Assistant"
-          style={{
-            position: 'fixed',
-            right: 0,
-            top: '50%',
-            transform: 'translateY(-50%)',
-            zIndex: 200,
-            background: 'var(--surface)',
-            border: '1.5px solid var(--border)',
-            borderRight: 'none',
-            borderRadius: '8px 0 0 8px',
-            padding: '12px 6px',
-            cursor: 'pointer',
+            height: '52px',
+            padding: sidebarCollapsed ? '0 12px' : '0 14px',
             display: 'flex',
-            flexDirection: 'column',
             alignItems: 'center',
-            gap: '6px',
-            color: 'var(--muted)',
-            boxShadow: '-2px 0 12px rgba(0,0,0,0.08)',
-            transition: 'all 0.2s',
-          }}
-          onMouseEnter={e => {
-            e.currentTarget.style.color = 'var(--accent)';
-            e.currentTarget.style.borderColor = 'var(--accent)';
-          }}
-          onMouseLeave={e => {
-            e.currentTarget.style.color = 'var(--muted)';
-            e.currentTarget.style.borderColor = 'var(--border)';
+            justifyContent: sidebarCollapsed ? 'center' : 'space-between',
+            borderBottom: '1px solid var(--border)',
+            flexShrink: 0,
           }}
         >
-          <PanelRightOpen size={16} />
-          <span style={{
-            fontSize: '10px',
-            fontFamily: 'var(--font-mono)',
-            writingMode: 'vertical-rl',
-            textOrientation: 'mixed',
-            letterSpacing: '0.05em',
-            whiteSpace: 'nowrap',
-          }}>AI</span>
-        </button>
-      )}
-
-      {/* ── Footer ── */}
-      <footer>
-        <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
-          <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <Edit3 size={11} style={{ verticalAlign: 'middle' }} />
-            NoteRootAI v1.0
-          </span>
-          <span style={{ color: 'var(--muted)' }}>
-            {notes.length} pages · {notes.filter(n => !n.synced).length} pending sync
-          </span>
-        </div>
-        <span
-          className="mono flex items-center gap-2"
-          style={{ color: sync.color, fontSize: '11px', display: 'flex', alignItems: 'center', gap: '6px' }}
-        >
-          {sync.icon} {sync.text}
-          {(sync as any).canRetry && (
-            <button
-              onClick={() => retrySync()}
+          <Link
+            to="/"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
+              textDecoration: 'none',
+              color: 'inherit',
+              minWidth: 0,
+            }}
+          >
+            <div
               style={{
-                fontSize: '10px',
-                padding: '1px 8px',
-                border: '1px solid #f87171',
-                borderRadius: '4px',
-                background: 'transparent',
-                color: '#f87171',
-                cursor: 'pointer',
-                fontFamily: 'var(--font-mono)',
+                width: '28px',
+                height: '28px',
+                borderRadius: '6px',
+                background: 'rgba(224, 84, 56, 0.12)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
               }}
             >
-              Retry
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#e05438" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z"/>
+                <path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"/>
+              </svg>
+            </div>
+            {!sidebarCollapsed && (
+              <span
+                style={{
+                  fontWeight: 600,
+                  fontSize: '15px',
+                  letterSpacing: '-0.2px',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                }}
+              >
+                NoteRoot AI
+              </span>
+            )}
+          </Link>
+
+          {!sidebarCollapsed && (
+            <button
+              onClick={toggleSidebarCollapse}
+              title="Collapse sidebar"
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: 'var(--muted)',
+                cursor: 'pointer',
+                padding: '4px',
+                borderRadius: '4px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+              onMouseEnter={e => (e.currentTarget.style.color = 'var(--fg)')}
+              onMouseLeave={e => (e.currentTarget.style.color = 'var(--muted)')}
+            >
+              <PanelLeftClose size={16} />
             </button>
           )}
-        </span>
-      </footer>
+        </div>
+
+        {/* Navigation Links */}
+        <div
+          style={{
+            flex: 1,
+            overflowY: 'auto',
+            overflowX: 'hidden',
+            padding: sidebarCollapsed ? '10px 6px' : '10px 10px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '2px',
+          }}
+        >
+          {navItems.map((item) => {
+            const active = item.path === '#search' ? false : isActive(item.path);
+            const content = (
+              <div
+                key={item.label}
+                onClick={item.isAction ? item.isAction : undefined}
+                title={sidebarCollapsed ? item.label : undefined}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                  padding: sidebarCollapsed ? '8px 0' : '7px 10px',
+                  justifyContent: sidebarCollapsed ? 'center' : 'flex-start',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontSize: '13.5px',
+                  fontWeight: active ? 600 : 400,
+                  color: active ? '#e05438' : 'var(--fg)',
+                  background: active ? 'rgba(224, 84, 56, 0.1)' : 'transparent',
+                  transition: 'background 0.12s, color 0.12s',
+                  textDecoration: 'none',
+                }}
+                onMouseEnter={e => {
+                  if (!active) e.currentTarget.style.background = 'var(--surface-2)';
+                }}
+                onMouseLeave={e => {
+                  if (!active) e.currentTarget.style.background = 'transparent';
+                }}
+              >
+                <span
+                  style={{
+                    color: active ? '#e05438' : 'var(--muted)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                  }}
+                >
+                  {item.icon}
+                </span>
+                {!sidebarCollapsed && <span>{item.label}</span>}
+              </div>
+            );
+
+            if (item.isAction) {
+              return <div key={item.label}>{content}</div>;
+            }
+            return (
+              <Link key={item.label} to={item.path} style={{ textDecoration: 'none' }}>
+                {content}
+              </Link>
+            );
+          })}
+
+          {/* Tags Section — derived from real notes (expanded only) */}
+          {!sidebarCollapsed && (
+            <div style={{ marginTop: '16px', paddingTop: '8px' }}>
+              <div
+                style={{
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  color: 'var(--muted)',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em',
+                  padding: '4px 10px',
+                  marginBottom: '2px',
+                }}
+              >
+                Tags
+              </div>
+              {dynamicTags.length === 0 ? (
+                <div style={{ padding: '6px 10px', fontSize: '12px', color: 'var(--muted)', fontStyle: 'italic' }}>
+                  No tags yet — add tags to your notes.
+                </div>
+              ) : (
+                dynamicTags.map(tag => (
+                  <Link
+                    key={tag}
+                    to={`/notes?tag=${encodeURIComponent(tag)}`}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      padding: '5px 10px',
+                      borderRadius: '6px',
+                      fontSize: '13px',
+                      color: 'var(--muted)',
+                      textDecoration: 'none',
+                      transition: 'color 0.12s, background 0.12s',
+                    }}
+                    onMouseEnter={e => {
+                      e.currentTarget.style.color = 'var(--fg)';
+                      e.currentTarget.style.background = 'var(--surface-2)';
+                    }}
+                    onMouseLeave={e => {
+                      e.currentTarget.style.color = 'var(--muted)';
+                      e.currentTarget.style.background = 'transparent';
+                    }}
+                  >
+                    <span style={{ fontSize: '12px' }}>#</span>
+                    <span>{tag}</span>
+                  </Link>
+                ))
+              )}
+            </div>
+          )}
+
+          {/* New Note quick action (expanded only) */}
+          {!sidebarCollapsed && (
+            <div style={{ marginTop: '12px', padding: '0 10px' }}>
+              <button
+                onClick={handleNewNote}
+                style={{
+                  width: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '7px 10px',
+                  borderRadius: '6px',
+                  fontSize: '13px',
+                  color: 'var(--muted)',
+                  background: 'transparent',
+                  border: '1px dashed var(--border)',
+                  cursor: 'pointer',
+                  transition: 'color 0.12s, background 0.12s, border-color 0.12s',
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.color = '#e05438';
+                  e.currentTarget.style.borderColor = '#e05438';
+                  e.currentTarget.style.background = 'rgba(224,84,56,0.06)';
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.color = 'var(--muted)';
+                  e.currentTarget.style.borderColor = 'var(--border)';
+                  e.currentTarget.style.background = 'transparent';
+                }}
+              >
+                <Plus size={14} /> New Note
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Sidebar Footer */}
+        <div
+          style={{
+            borderTop: '1px solid var(--border)',
+            padding: sidebarCollapsed ? '10px 6px' : '10px 10px',
+            display: 'flex',
+            flexDirection: sidebarCollapsed ? 'column' : 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '6px',
+            flexShrink: 0,
+          }}
+        >
+          {sidebarCollapsed ? (
+            <>
+              <Link
+                to="/settings"
+                title="Settings"
+                style={{
+                  width: '36px',
+                  height: '36px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderRadius: '6px',
+                  color: isActive('/settings') ? '#e05438' : 'var(--muted)',
+                  background: isActive('/settings') ? 'rgba(224, 84, 56, 0.1)' : 'transparent',
+                  textDecoration: 'none',
+                }}
+              >
+                <Settings size={18} />
+              </Link>
+              <button
+                onClick={toggleSidebarCollapse}
+                title="Expand sidebar"
+                style={{
+                  width: '36px',
+                  height: '36px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderRadius: '6px',
+                  background: 'transparent',
+                  border: 'none',
+                  color: 'var(--muted)',
+                  cursor: 'pointer',
+                }}
+              >
+                <PanelLeft size={18} />
+              </button>
+            </>
+          ) : (
+            <>
+              <Link
+                to="/settings"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  textDecoration: 'none',
+                  color: 'inherit',
+                  flex: 1,
+                  minWidth: 0,
+                  padding: '4px 6px',
+                  borderRadius: '6px',
+                }}
+                onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-2)')}
+                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+              >
+                <div
+                  style={{
+                    width: '26px',
+                    height: '26px',
+                    borderRadius: '50%',
+                    background: 'var(--surface-2)',
+                    border: '1px solid var(--border)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    color: 'var(--fg)',
+                    flexShrink: 0,
+                  }}
+                >
+                  {displayName.charAt(0)}
+                </div>
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div style={{ fontSize: '13px', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {displayName}
+                  </div>
+                </div>
+              </Link>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
+                <button
+                  onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+                  title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: 'var(--muted)',
+                    cursor: 'pointer',
+                    padding: '6px',
+                    borderRadius: '6px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                  onMouseEnter={e => (e.currentTarget.style.color = 'var(--fg)')}
+                  onMouseLeave={e => (e.currentTarget.style.color = 'var(--muted)')}
+                >
+                  {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
+                </button>
+                <button
+                  onClick={() => setOnboardingOpen(true)}
+                  title="Tutorial & Feature Tour"
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: 'var(--muted)',
+                    cursor: 'pointer',
+                    padding: '6px',
+                    borderRadius: '6px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                  onMouseEnter={e => (e.currentTarget.style.color = '#e05438')}
+                  onMouseLeave={e => (e.currentTarget.style.color = 'var(--muted)')}
+                >
+                  <HelpCircle size={16} />
+                </button>
+                <Link
+                  to="/settings"
+                  title="Settings"
+                  style={{
+                    color: 'var(--muted)',
+                    padding: '6px',
+                    borderRadius: '6px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    textDecoration: 'none',
+                  }}
+                  onMouseEnter={e => (e.currentTarget.style.color = 'var(--fg)')}
+                  onMouseLeave={e => (e.currentTarget.style.color = 'var(--muted)')}
+                >
+                  <Settings size={16} />
+                </Link>
+              </div>
+            </>
+          )}
+        </div>
+      </aside>
+
+      {/* ══════════════════════════════════════
+          MAIN CONTENT AREA
+         ══════════════════════════════════════ */}
+      <div
+        style={{
+          flex: 1,
+          display: 'flex',
+          flexDirection: 'column',
+          height: '100%',
+          overflow: 'hidden',
+          minWidth: 0,
+          background: 'var(--bg)',
+        }}
+      >
+        <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', minWidth: 0 }}>
+          <Outlet />
+        </div>
+      </div>
+
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
+      <OnboardingModal forceOpen={onboardingOpen} onClose={() => setOnboardingOpen(false)} />
     </div>
   );
 }

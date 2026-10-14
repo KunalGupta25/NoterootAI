@@ -39,6 +39,14 @@ def get_provider(
             provider_name="groq",
             default_embedding_model="",
         )
+    elif provider_name == "openrouter":
+        return OpenAIProvider(
+            api_key=api_key,
+            base_url="https://openrouter.ai/api/v1",
+            default_model="deepseek/deepseek-r1",
+            provider_name="openrouter",
+            default_embedding_model="",
+        )
     elif provider_name == "custom" or custom_base_url:
         return OpenAIProvider(
             api_key=api_key,

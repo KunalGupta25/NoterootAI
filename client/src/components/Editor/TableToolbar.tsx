@@ -56,11 +56,30 @@ export default function TableToolbar({ editor }: TableToolbarProps) {
   );
 
   return (
-    <div className="table-toolbar">
+    <div
+      className="table-toolbar"
+      style={{
+        display: 'flex',
+        flexDirection: 'row',
+        alignItems: 'center',
+        position: 'sticky',
+        top: 0,
+        background: 'var(--surface)',
+        border: '1px solid var(--border)',
+        borderRadius: '8px',
+        padding: '4px 6px',
+        gap: '2px',
+        marginBottom: '12px',
+        boxShadow: '0 4px 16px rgba(0, 0, 0, 0.12)',
+        zIndex: 30,
+        width: 'fit-content',
+        userSelect: 'none',
+      }}
+    >
       <button
         style={btnStyle}
         onClick={() => editor.chain().focus().addRowBefore().run()}
-        onMouseEnter={e => { e.currentTarget.style.background = 'var(--bg)'; }}
+        onMouseEnter={e => { e.currentTarget.style.background = 'var(--surface-2)'; }}
         onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
         title="Add row above"
       >
@@ -69,7 +88,7 @@ export default function TableToolbar({ editor }: TableToolbarProps) {
       <button
         style={btnStyle}
         onClick={() => editor.chain().focus().addRowAfter().run()}
-        onMouseEnter={e => { e.currentTarget.style.background = 'var(--bg)'; }}
+        onMouseEnter={e => { e.currentTarget.style.background = 'var(--surface-2)'; }}
         onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
         title="Add row below"
       >
@@ -79,7 +98,7 @@ export default function TableToolbar({ editor }: TableToolbarProps) {
       <button
         style={btnStyle}
         onClick={() => editor.chain().focus().addColumnBefore().run()}
-        onMouseEnter={e => { e.currentTarget.style.background = 'var(--bg)'; }}
+        onMouseEnter={e => { e.currentTarget.style.background = 'var(--surface-2)'; }}
         onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
         title="Add column left"
       >
@@ -88,7 +107,7 @@ export default function TableToolbar({ editor }: TableToolbarProps) {
       <button
         style={btnStyle}
         onClick={() => editor.chain().focus().addColumnAfter().run()}
-        onMouseEnter={e => { e.currentTarget.style.background = 'var(--bg)'; }}
+        onMouseEnter={e => { e.currentTarget.style.background = 'var(--surface-2)'; }}
         onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
         title="Add column right"
       >
@@ -98,7 +117,7 @@ export default function TableToolbar({ editor }: TableToolbarProps) {
       <button
         style={{ ...btnStyle, color: '#ef4444' }}
         onClick={() => editor.chain().focus().deleteRow().run()}
-        onMouseEnter={e => { e.currentTarget.style.background = 'oklch(95% 0.05 25)'; }}
+        onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239, 68, 68, 0.12)'; }}
         onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
         title="Delete row"
       >
@@ -107,7 +126,7 @@ export default function TableToolbar({ editor }: TableToolbarProps) {
       <button
         style={{ ...btnStyle, color: '#ef4444' }}
         onClick={() => editor.chain().focus().deleteColumn().run()}
-        onMouseEnter={e => { e.currentTarget.style.background = 'oklch(95% 0.05 25)'; }}
+        onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239, 68, 68, 0.12)'; }}
         onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
         title="Delete column"
       >
@@ -117,7 +136,7 @@ export default function TableToolbar({ editor }: TableToolbarProps) {
       <button
         style={{ ...btnStyle, color: '#ef4444' }}
         onClick={() => editor.chain().focus().deleteTable().run()}
-        onMouseEnter={e => { e.currentTarget.style.background = 'oklch(95% 0.05 25)'; }}
+        onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239, 68, 68, 0.12)'; }}
         onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
         title="Delete entire table"
       >

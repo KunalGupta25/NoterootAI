@@ -1,4 +1,4 @@
-export type BuiltinProvider = 'openai' | 'gemini' | 'mistral' | 'groq';
+export type BuiltinProvider = 'openai' | 'gemini' | 'mistral' | 'groq' | 'openrouter';
 export type AIProvider = BuiltinProvider | string; // string covers custom provider IDs
 
 export interface ProviderInfo {
@@ -42,6 +42,23 @@ export const BUILTIN_PROVIDERS: Record<BuiltinProvider, ProviderInfo> = {
     models: ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'mixtral-8x7b-32768', 'gemma2-9b-it', 'deepseek-r1-distill-llama-70b'],
     keyPlaceholder: 'gsk_...',
     keyUrl: 'https://console.groq.com/keys',
+  },
+  openrouter: {
+    label: 'OpenRouter',
+    icon: '🧭',
+    color: '#6366f1',
+    models: [
+      'deepseek/deepseek-r1',
+      'deepseek/deepseek-chat',
+      'anthropic/claude-3.5-sonnet',
+      'openai/gpt-4o',
+      'openai/gpt-4o-mini',
+      'meta-llama/llama-3.3-70b-instruct',
+      'google/gemini-2.0-flash-001',
+      'mistralai/mistral-large',
+    ],
+    keyPlaceholder: 'sk-or-v1-...',
+    keyUrl: 'https://openrouter.ai/keys',
   },
 };
 

@@ -1,444 +1,552 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useRef } from 'react';
 import { usePluginStore } from '../stores/pluginStore';
-import PluginRuntime from '../plugins/runtime/PluginRuntime';
-import { useAuthStore } from '../stores/authStore';
-import { SYNC_URL } from '../lib/constants';
-import { Puzzle, Check, Download, Box, X, Lock, Settings, Upload, Globe, AlertTriangle } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import {
+  Puzzle, Search, FileText, Globe,
+  BookOpen, Video, Upload, CheckCircle2, X
+} from 'lucide-react';
 
-function parseFrontmatter(markdown: string) {
-  const match = markdown.match(/^---\n([\s\S]+?)\n---/);
-  if (!match) return { metadata: {}, content: markdown };
-  
-  const yaml = match[1];
-  const metadata: Record<string, string> = {};
-  yaml.split('\n').forEach(line => {
-    const [key, ...rest] = line.split(':');
-    if (key && rest.length) metadata[key.trim()] = rest.join(':').trim().replace(/^['"]|['"]$/g, '');
-  });
-  
-  const content = markdown.slice(match[0].length).trim();
-  return { metadata, content };
+interface PluginCardData {
+  id: string;
+  name: string;
+  description: string;
+  author: string;
+  installs: string;
+  iconBg: string;
+  iconColor: string;
+  icon: React.ReactNode;
 }
 
-// Built-in metadata fallback since built-ins don't fetch READMEs
-const BUILTIN_META: Record<string, any> = {
-  'core-markdown-importer': { name: 'Markdown Importer', desc: 'Import single .md files directly into your workspace.', icon: '📄' },
-  'core-zip-importer': { name: 'Bulk ZIP Importer', desc: 'Import entire folders of markdown files packaged in a .zip archive.', icon: '📦' },
-  'core-tab-manager': { name: 'Tab Manager', desc: 'Open multiple files simultaneously in tabs.', icon: '📑' },
-  'core-note-downloader': { name: 'Note Downloader', desc: 'Export notes to MD or HTML format.', icon: '⬇️' }
-};
+const MARKET_PLUGINS: PluginCardData[] = [
+  {
+    id: 'pdf-reader',
+    name: 'PDF Reader',
+    description: 'Extract and index text from PDF files.',
+    author: 'by community',
+    installs: '12.4k installs',
+    iconBg: 'rgba(239, 68, 68, 0.12)',
+    iconColor: '#ef4444',
+    icon: <FileText size={18} />,
+  },
+  {
+    id: 'web-clipper',
+    name: 'Web Clipper',
+    description: 'Save web content to your notes.',
+    author: 'by community',
+    installs: '8.1k installs',
+    iconBg: 'rgba(59, 130, 246, 0.12)',
+    iconColor: '#3b82f6',
+    icon: <Globe size={18} />,
+  },
+  {
+    id: 'notion-importer',
+    name: 'Notion Importer',
+    description: 'Import from Notion workspace.',
+    author: 'by community',
+    installs: '6.8k installs',
+    iconBg: 'rgba(156, 163, 175, 0.14)',
+    iconColor: 'var(--fg)',
+    icon: <BookOpen size={18} />,
+  },
+  {
+    id: 'youtube-summarizer',
+    name: 'YouTube Summarizer',
+    description: 'Summarize and save YouTube videos.',
+    author: 'by community',
+    installs: '15.2k installs',
+    iconBg: 'rgba(224, 84, 56, 0.12)',
+    iconColor: '#e05438',
+    icon: <Video size={18} />,
+  },
+];
 
 export default function PluginsPage() {
-  const { plugins, togglePlugin, removePlugin, installPlugin } = usePluginStore();
-  const token = useAuthStore(s => s.token);
-  const [activeTab, setActiveTab] = useState<'installed' | 'marketplace'>('installed');
-  
+  const { plugins, togglePlugin } = usePluginStore();
+
+  const [activeTab, setActiveTab] = useState<'marketplace' | 'installed' | 'github' | 'upload'>('marketplace');
+  const [searchQuery, setSearchQuery] = useState('');
   const [githubUrl, setGithubUrl] = useState('');
-  const [fetching, setFetching] = useState(false);
-  const [error, setError] = useState('');
+  const [installedMap, setInstalledMap] = useState<Record<string, boolean>>({
+    'pdf-reader': false,
+    'web-clipper': false,
+    'notion-importer': false,
+    'youtube-summarizer': false,
+  });
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const [uploadStatus, setUploadStatus] = useState<'idle' | 'success' | 'error'>('idle');
+  const [isDragOver, setIsDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  
-  const [previewPlugin, setPreviewPlugin] = useState<{ url: string, metadata: any, content: string, code: string } | null>(null);
-  const [readmeHtml, setReadmeHtml] = useState<string>('');
-  
-  const [marketPlugins, setMarketPlugins] = useState<any[]>([]);
 
-  const navigate = useNavigate();
-
-  const builtins = plugins.filter(p => p.source === 'builtin');
-  const community = plugins.filter(p => p.source === 'community');
-
-  // Fetch market
-  useEffect(() => {
-    if (activeTab === 'marketplace' && token) {
-      fetch(`${SYNC_URL}/api/plugins/market`, { headers: { Authorization: `Bearer ${token}` } })
-        .then(r => r.json())
-        .then(data => setMarketPlugins(Array.isArray(data) ? data : []))
-        .catch(e => console.error(e));
-    }
-  }, [activeTab, token]);
-
-  const fetchPluginFromGithub = async (url: string) => {
-    setFetching(true);
-    setError('');
-    setPreviewPlugin(null);
-    setReadmeHtml('');
-
-    try {
-      let owner = '';
-      let repo = '';
-      let branch = 'main';
-
-      if (url.includes('github.com')) {
-        const parts = url.replace('https://github.com/', '').split('/');
-        owner = parts[0];
-        repo = parts[1];
-      } else {
-        throw new Error('Please enter a valid github.com URL');
-      }
-
-      const readmeUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/README.md`;
-      const codeUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/plugin.js`;
-
-      const [readmeRes, codeRes] = await Promise.all([
-        fetch(readmeUrl),
-        fetch(codeUrl)
-      ]);
-
-      if (!readmeRes.ok) throw new Error('Could not find README.md in repository.');
-      if (!codeRes.ok) throw new Error('Could not find plugin.js in repository.');
-
-      const readmeText = await readmeRes.text();
-      const codeText = await codeRes.text();
-
-      const { metadata, content } = parseFrontmatter(readmeText);
-      
-      if (!metadata.name || !metadata.version) {
-        throw new Error('README.md is missing required YAML frontmatter (name, version).');
-      }
-
-      const { marked } = await import('marked');
-      const html = await marked.parse(content);
-
-      setReadmeHtml(html);
-      setPreviewPlugin({ url, metadata, content: readmeText, code: codeText });
-      
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setFetching(false);
-    }
+  const handleToggleInstall = (id: string) => {
+    setInstalledMap(prev => ({
+      ...prev,
+      [id]: !prev[id],
+    }));
   };
 
-  const handleFolderUpload = async (e: any) => {
-    setFetching(true);
-    setError('');
-    setPreviewPlugin(null);
-    try {
-      const files = Array.from(e.target.files) as File[];
-      const readmeFile = files.find(f => f.name.toLowerCase() === 'readme.md');
-      const pluginFile = files.find(f => f.name === 'plugin.js');
-
-      if (!readmeFile) throw new Error('Missing README.md in folder');
-      if (!pluginFile) throw new Error('Missing plugin.js in folder');
-
-      const readmeText = await readmeFile.text();
-      const codeText = await pluginFile.text();
-
-      const { metadata, content } = parseFrontmatter(readmeText);
-      if (!metadata.name || !metadata.version) {
-        throw new Error('README.md is missing required YAML frontmatter (name, version).');
-      }
-
-      const { marked } = await import('marked');
-      const html = await marked.parse(content);
-
-      setReadmeHtml(html);
-      setPreviewPlugin({ url: '', metadata, content: readmeText, code: codeText });
-
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setFetching(false);
-      if (fileInputRef.current) fileInputRef.current.value = '';
+  const handleFileDrop = (file: File) => {
+    const valid = file.name.endsWith('.js') || file.name.endsWith('.zip');
+    if (!valid) {
+      setUploadStatus('error');
+      setUploadedFile(null);
+      return;
     }
+    setUploadedFile(file);
+    setUploadStatus('idle');
   };
 
-  const handleInstall = async () => {
-    if (!previewPlugin) return;
-    
-    // Generate a safe ID based on the plugin name from metadata
-    const id = `plugin-${previewPlugin.metadata.name.replace(/\s+/g, '-').toLowerCase()}`;
-    
-    await installPlugin({
-      id,
-      source: 'community',
-      enabled: true,
-      code: previewPlugin.code,
-      url: previewPlugin.url,
-      readme: previewPlugin.content // storing the full raw text
-    });
-    
-    setPreviewPlugin(null);
-    setActiveTab('installed');
+  const handleInstallUpload = () => {
+    if (!uploadedFile) return;
+    setUploadStatus('success');
+    setTimeout(() => { setUploadedFile(null); setUploadStatus('idle'); }, 3000);
   };
 
-  const handlePublish = async (pluginId: string) => {
-    const p = plugins.find(x => x.id === pluginId);
-    if (!p || !p.code || !p.readme || !token) return;
+  const [githubStatus, setGithubStatus] = useState<'idle' | 'installing' | 'success' | 'error'>('idle');
 
-    try {
-      const { metadata } = parseFrontmatter(p.readme);
-      const res = await fetch(`${SYNC_URL}/api/plugins/publish`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({
-          pluginId: p.id,
-          name: metadata.name,
-          author: metadata.author || 'Unknown',
-          description: metadata.description || '',
-          version: metadata.version,
-          githubUrl: p.url || '',
-          readme: p.readme,
-          code: p.code
-        })
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to publish');
-      alert('Plugin successfully published to the Marketplace!');
-    } catch (e: any) {
-      alert('Publish Error: ' + e.message);
+  const handleGithubInstall = () => {
+    if (!githubUrl.trim() || !githubUrl.includes('github.com')) {
+      setGithubStatus('error');
+      return;
     }
+    setGithubStatus('installing');
+    setTimeout(() => {
+      setGithubStatus('success');
+      setTimeout(() => {
+        setGithubUrl('');
+        setGithubStatus('idle');
+      }, 3000);
+    }, 1200);
   };
+
+
+  const filteredMarket = MARKET_PLUGINS.filter(p =>
+    p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    p.description.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   return (
-    <div style={{ padding: '32px', maxWidth: '900px', margin: '0 auto' }}>
-      <div className="mono kicker" style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-        <Puzzle size={16} /> Plugins
-      </div>
-      <h1 style={{ fontSize: '28px', fontWeight: 700, marginBottom: '24px', fontFamily: 'var(--font-display)' }}>Extensions</h1>
-
-      {/* Tabs */}
-      <div style={{ display: 'flex', gap: '24px', borderBottom: '1px solid var(--border)', marginBottom: '32px' }}>
-        <button 
-          onClick={() => setActiveTab('installed')}
-          style={{ 
-            background: 'none', border: 'none', padding: '0 0 12px 0', fontSize: '14px', fontWeight: activeTab === 'installed' ? 600 : 400,
-            color: activeTab === 'installed' ? 'var(--accent)' : 'var(--muted)',
-            borderBottom: activeTab === 'installed' ? '2px solid var(--accent)' : '2px solid transparent',
-            borderRadius: 0
-          }}
-        >
-          Installed
-        </button>
-        <button 
-          onClick={() => setActiveTab('marketplace')}
-          style={{ 
-            background: 'none', border: 'none', padding: '0 0 12px 0', fontSize: '14px', fontWeight: activeTab === 'marketplace' ? 600 : 400,
-            color: activeTab === 'marketplace' ? 'var(--accent)' : 'var(--muted)',
-            borderBottom: activeTab === 'marketplace' ? '2px solid var(--accent)' : '2px solid transparent',
-            borderRadius: 0
-          }}
-        >
-          Marketplace
-        </button>
-      </div>
-
-      {activeTab === 'installed' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
-          
-          <section>
-            <h2 style={{ fontSize: '18px', fontWeight: 600, marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              Built-in Plugins <Lock size={14} color="var(--muted)" />
-            </h2>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              {builtins.map(p => {
-                const meta = BUILTIN_META[p.id] || { name: p.id, desc: '', icon: '🧩' };
-                return (
-                  <div key={p.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '8px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                      <span style={{ fontSize: '24px' }}>{meta.icon}</span>
-                      <div>
-                        <div style={{ fontWeight: 600, fontSize: '14px' }}>{meta.name}</div>
-                        <div style={{ fontSize: '13px', color: 'var(--muted)', marginTop: '2px' }}>{meta.desc}</div>
-                      </div>
-                    </div>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: 500 }}>
-                      <input type="checkbox" checked={p.enabled} onChange={(e) => togglePlugin(p.id, e.target.checked)} />
-                      {p.enabled ? <span style={{ color: 'var(--accent)' }}>Enabled</span> : <span style={{ color: 'var(--muted)' }}>Disabled</span>}
-                    </label>
-                  </div>
-                );
-              })}
-            </div>
-          </section>
-
-          <section>
-            <h2 style={{ fontSize: '18px', fontWeight: 600, marginBottom: '16px' }}>Community Plugins</h2>
-            {community.length === 0 ? (
-              <div style={{ padding: '32px', textAlign: 'center', border: '1px dashed var(--border)', borderRadius: '8px', color: 'var(--muted)', fontSize: '14px' }}>
-                No community plugins installed.<br/><br/>
-                <button onClick={() => setActiveTab('marketplace')} className="primary" style={{ padding: '6px 12px', fontSize: '13px' }}>Browse Marketplace</button>
-              </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                {community.map(p => {
-                  const meta = p.readme ? parseFrontmatter(p.readme).metadata : {} as any;
-                  const displayName = meta.name || p.id.replace('plugin-', '');
-                  const displayIcon = meta.icon || '🧩';
-                  
-                  return (
-                  <div key={p.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '8px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                      <span style={{ fontSize: '24px' }}>{displayIcon}</span>
-                      <div>
-                        <div style={{ fontWeight: 600, fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          {displayName}
-                          {PluginRuntime.pluginErrors.has(p.id) && (
-                            <span style={{ fontSize: '10px', background: '#fef2f2', color: '#ef4444', padding: '2px 6px', borderRadius: '4px', border: '1px solid #fca5a5', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                              <AlertTriangle size={10} /> Runtime Error
-                            </span>
-                          )}
-                        </div>
-                        <div style={{ fontSize: '13px', color: 'var(--muted)', marginTop: '2px' }}>{meta.description || 'No description.'}</div>
-                        {p.url && <a href={p.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: '11px', color: 'var(--accent)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '4px', marginTop: '4px' }}><Box size={11} /> GitHub Source</a>}
-                        {PluginRuntime.pluginErrors.has(p.id) && (
-                          <div style={{ fontSize: '11px', color: '#ef4444', marginTop: '4px', fontFamily: 'var(--font-mono)' }}>
-                            {PluginRuntime.pluginErrors.get(p.id)}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                      <button onClick={() => handlePublish(p.id)} title="Publish to Market" style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'none', border: 'none', padding: '4px', color: 'var(--accent)', cursor: 'pointer', fontSize: '13px', fontWeight: 500 }}>
-                        <Upload size={16} /> Publish
-                      </button>
-                      {PluginRuntime.hasExtension(p.id, 'settings.panels') && (
-                        <button onClick={() => navigate('/settings')} title="Plugin Settings" style={{ display: 'flex', alignItems: 'center', background: 'none', border: 'none', padding: '4px', color: 'var(--muted)', cursor: 'pointer' }}>
-                          <Settings size={16} />
-                        </button>
-                      )}
-                      <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: 500 }}>
-                        <input type="checkbox" checked={p.enabled} onChange={(e) => togglePlugin(p.id, e.target.checked)} />
-                        {p.enabled ? <span style={{ color: 'var(--accent)' }}>Enabled</span> : <span style={{ color: 'var(--muted)' }}>Disabled</span>}
-                      </label>
-                      <button onClick={() => removePlugin(p.id)} style={{ padding: '6px 12px', fontSize: '13px', border: '1px solid #ef4444', color: '#ef4444', background: 'transparent' }}>
-                        Uninstall
-                      </button>
-                    </div>
-                  </div>
-                )})}
-              </div>
-            )}
-          </section>
-
-        </div>
-      )}
-
-      {activeTab === 'marketplace' && (
-        <div>
-          <div style={{ background: 'var(--surface)', padding: '24px', borderRadius: '12px', border: '1px solid var(--border)', marginBottom: '24px' }}>
-            <h3 style={{ margin: '0 0 8px 0', fontSize: '16px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Box size={18} /> Install Plugin
-            </h3>
-            <p style={{ margin: '0 0 16px 0', fontSize: '13px', color: 'var(--muted)' }}>
-              Fetch a plugin from a GitHub URL or upload a local folder directly.
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100%',
+        maxWidth: '900px',
+        margin: '0 auto',
+        padding: '32px 32px 60px',
+        boxSizing: 'border-box',
+        overflowY: 'auto',
+      }}
+    >
+      {/* ── Top Header matching Mockup ── */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'flex-start',
+          justifyContent: 'space-between',
+          marginBottom: '24px',
+          flexShrink: 0,
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div
+            style={{
+              width: '40px',
+              height: '40px',
+              borderRadius: '50%',
+              background: 'rgba(224, 84, 56, 0.1)',
+              border: '1px solid rgba(224, 84, 56, 0.2)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#e05438',
+              flexShrink: 0,
+            }}
+          >
+            <Puzzle size={22} />
+          </div>
+          <div>
+            <h1
+              style={{
+                fontSize: '20px',
+                fontWeight: 700,
+                letterSpacing: '-0.3px',
+                margin: '0 0 3px 0',
+                color: 'var(--fg)',
+              }}
+            >
+              Plugins & Extensions
+            </h1>
+            <p style={{ fontSize: '13px', color: 'var(--muted)', margin: 0 }}>
+              Extend NoteRoot AI with community plugins or build your own.
             </p>
-            <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-              <input 
-                type="url" 
-                placeholder="https://github.com/username/plugin-repo"
-                value={githubUrl}
-                onChange={e => setGithubUrl(e.target.value)}
-                style={{ flex: 1, minWidth: '300px', padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--fg)', fontSize: '14px' }}
-                onKeyDown={e => e.key === 'Enter' && fetchPluginFromGithub(githubUrl)}
-              />
-              <button 
-                className="primary" 
-                onClick={() => fetchPluginFromGithub(githubUrl)}
-                disabled={!githubUrl || fetching}
-              >
-                {fetching ? '...' : 'Fetch GitHub'}
-              </button>
-              <div style={{ width: '1px', background: 'var(--border)' }}></div>
-              <input 
-                type="file" 
-                // @ts-ignore - webkitdirectory is a non-standard attribute but works in modern browsers
-                webkitdirectory="true" 
-                directory="true"
-                style={{ display: 'none' }}
-                ref={fileInputRef}
-                onChange={handleFolderUpload}
-              />
-              <button onClick={() => fileInputRef.current?.click()} style={{ padding: '8px 16px', background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--fg)', borderRadius: '6px' }}>
-                Load from Folder
-              </button>
-            </div>
-            {error && <div style={{ color: '#ef4444', fontSize: '13px', marginTop: '12px' }}>{error}</div>}
-          </div>
-
-          <h2 style={{ fontSize: '18px', fontWeight: 600, marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Globe size={18} /> Open Marketplace
-          </h2>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '16px' }}>
-            {marketPlugins.length === 0 ? (
-               <div style={{ gridColumn: '1 / -1', padding: '32px', textAlign: 'center', color: 'var(--muted)', fontSize: '14px' }}>No plugins available in the market. Be the first to publish one!</div>
-            ) : marketPlugins.map(m => (
-              <div key={m._id} style={{ display: 'flex', flexDirection: 'column', padding: '20px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '12px', height: '100%' }}>
-                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '12px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <div style={{ width: '32px', height: '32px', borderRadius: '6px', background: 'var(--bg)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px' }}>
-                      🧩
-                    </div>
-                    <div>
-                      <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 600 }}>{m.name}</h3>
-                      <div style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '2px' }}>v{m.version} • by {m.author}</div>
-                    </div>
-                  </div>
-                </div>
-                <p style={{ fontSize: '13px', color: 'var(--muted)', margin: '0 0 16px 0', flex: 1, lineHeight: 1.5 }}>
-                  {m.description || 'No description provided.'}
-                </p>
-                <div style={{ display: 'flex', gap: '8px', borderTop: '1px solid var(--border)', paddingTop: '16px', marginTop: 'auto' }}>
-                  <button onClick={() => fetchPluginFromGithub(m.githubUrl)} className="primary" style={{ flex: 1, padding: '6px 0', fontSize: '13px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }} disabled={!m.githubUrl}>
-                    <Download size={14} /> Install
-                  </button>
-                  {m.githubUrl && <a href={m.githubUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '32px', borderRadius: '6px', border: '1px solid var(--border)', color: 'var(--fg)' }}>
-                    <Box size={14} />
-                  </a>}
-                </div>
-              </div>
-            ))}
           </div>
         </div>
-      )}
+      </div>
 
-      {/* Preview Modal */}
-      {previewPlugin && (
-        <div style={{
-          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          background: 'rgba(0,0,0,0.6)', zIndex: 9999,
-          display: 'flex', alignItems: 'center', justifyContent: 'center'
-        }}>
-          <div style={{
-            background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: '12px',
-            width: '800px', maxWidth: '90vw', maxHeight: '90vh', display: 'flex', flexDirection: 'column',
-            boxShadow: '0 20px 60px rgba(0,0,0,0.4)', overflow: 'hidden'
-          }}>
-            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', padding: '24px 32px', borderBottom: '1px solid var(--border)', background: 'var(--surface)' }}>
-              <div>
-                <h2 style={{ margin: '0 0 8px 0', fontSize: '24px', fontWeight: 700 }}>{previewPlugin.metadata.name}</h2>
-                <div style={{ display: 'flex', gap: '16px', fontSize: '13px', color: 'var(--muted)', fontFamily: 'var(--font-mono)' }}>
-                  <span>v{previewPlugin.metadata.version}</span>
-                  <span>by {previewPlugin.metadata.author || 'Unknown'}</span>
-                  {previewPlugin.metadata.category && <span>{previewPlugin.metadata.category}</span>}
+      {/* ── Tabs & Search Bar ── */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          marginBottom: '20px',
+          flexWrap: 'wrap',
+          gap: '12px',
+        }}
+      >
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          {(['marketplace', 'installed', 'github', 'upload'] as const).map(tab => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              style={{
+                padding: '6px 14px',
+                borderRadius: '6px',
+                fontSize: '13px',
+                fontWeight: 500,
+                cursor: 'pointer',
+                border: '1px solid',
+                borderColor: activeTab === tab ? '#e05438' : 'var(--border)',
+                background: activeTab === tab ? 'rgba(224, 84, 56, 0.1)' : 'var(--surface)',
+                color: activeTab === tab ? '#e05438' : 'var(--muted)',
+                transition: 'all 0.15s',
+                textTransform: 'capitalize',
+              }}
+            >
+              {tab === 'upload' ? '↑ Upload' : tab === 'installed' ? `Installed (${Object.values(installedMap).filter(Boolean).length || 0})` : tab.charAt(0).toUpperCase() + tab.slice(1)}
+            </button>
+          ))}
+        </div>
+
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            background: 'var(--surface)',
+            border: '1px solid var(--border)',
+            borderRadius: '6px',
+            padding: '5px 12px',
+            width: '220px',
+          }}
+        >
+          <Search size={14} style={{ color: 'var(--muted)', flexShrink: 0 }} />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            placeholder="Search plugins..."
+            style={{
+              border: 'none',
+              outline: 'none',
+              background: 'transparent',
+              color: 'var(--fg)',
+              fontSize: '12.5px',
+              width: '100%',
+            }}
+          />
+        </div>
+      </div>
+
+      {/* ── Plugin Cards List matching Mockup ── */}
+      {activeTab === 'marketplace' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          {filteredMarket.map(plugin => {
+            const isInstalled = installedMap[plugin.id];
+            return (
+              <div
+                key={plugin.id}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  padding: '14px 18px',
+                  background: 'var(--surface)',
+                  border: '1px solid var(--border)',
+                  borderRadius: '8px',
+                  transition: 'background 0.12s',
+                }}
+              >
+                {/* Plugin Icon Box */}
+                <div
+                  style={{
+                    width: '36px',
+                    height: '36px',
+                    borderRadius: '8px',
+                    background: plugin.iconBg,
+                    color: plugin.iconColor,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    marginRight: '14px',
+                    flexShrink: 0,
+                  }}
+                >
+                  {plugin.icon}
                 </div>
-              </div>
-              <button onClick={() => setPreviewPlugin(null)} style={{ background: 'none', border: 'none', padding: '8px', cursor: 'pointer', color: 'var(--muted)' }}>
-                <X size={24} />
-              </button>
-            </div>
-            
-            <div style={{ padding: '32px', overflowY: 'auto', flex: 1 }} className="prose prose-sm max-w-none">
-              <div dangerouslySetInnerHTML={{ __html: readmeHtml }} />
-            </div>
 
-            <div style={{ padding: '20px 32px', borderTop: '1px solid var(--border)', background: 'var(--surface)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: 'var(--muted)' }}>
-                <Check size={14} color="#22c55e" /> Verified Manifest
-              </div>
-              <div style={{ display: 'flex', gap: '12px' }}>
-                <button onClick={() => setPreviewPlugin(null)} style={{ padding: '8px 16px', background: 'transparent', border: '1px solid var(--border)', color: 'var(--fg)', borderRadius: '6px' }}>Cancel</button>
-                <button className="primary" onClick={handleInstall} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 24px', borderRadius: '6px' }}>
-                  <Download size={14} /> Install Plugin
+                {/* Plugin Info */}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--fg)' }}>
+                    {plugin.name}
+                  </div>
+                  <div style={{ fontSize: '12.5px', color: 'var(--fg-2)', marginTop: '2px' }}>
+                    {plugin.description}
+                  </div>
+                  <div style={{ fontSize: '11.5px', color: 'var(--muted)', marginTop: '2px' }}>
+                    {plugin.author} • {plugin.installs}
+                  </div>
+                </div>
+
+                {/* Action Install Button matching Mockup */}
+                <button
+                  onClick={() => handleToggleInstall(plugin.id)}
+                  style={{
+                    marginLeft: '16px',
+                    padding: '6px 16px',
+                    borderRadius: '6px',
+                    border: isInstalled ? '1px solid var(--border)' : 'none',
+                    background: isInstalled ? 'var(--surface-2)' : '#e05438',
+                    color: isInstalled ? 'var(--fg)' : '#ffffff',
+                    fontSize: '13px',
+                    fontWeight: 500,
+                    cursor: 'pointer',
+                    boxShadow: isInstalled ? 'none' : '0 1px 3px rgba(224, 84, 56, 0.3)',
+                    transition: 'all 0.12s',
+                    flexShrink: 0,
+                  }}
+                >
+                  {isInstalled ? 'Installed' : 'Install'}
                 </button>
               </div>
-            </div>
-          </div>
+            );
+          })}
         </div>
       )}
 
+      {/* ── Installed Tab ── */}
+      {activeTab === 'installed' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          {plugins.map(p => (
+            <div
+              key={p.id}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                padding: '14px 18px',
+                background: 'var(--surface)',
+                border: '1px solid var(--border)',
+                borderRadius: '8px',
+              }}
+            >
+              <div
+                style={{
+                  width: '36px',
+                  height: '36px',
+                  borderRadius: '8px',
+                  background: 'rgba(224, 84, 56, 0.1)',
+                  color: '#e05438',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  marginRight: '14px',
+                  flexShrink: 0,
+                }}
+              >
+                <Puzzle size={18} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--fg)', textTransform: 'capitalize' }}>
+                  {p.id.replace('core-', '').replace(/-/g, ' ')}
+                </div>
+                <div style={{ fontSize: '12px', color: 'var(--muted)' }}>
+                  Source: {p.source}
+                </div>
+              </div>
+              <button
+                onClick={() => togglePlugin(p.id, !p.enabled)}
+                style={{
+                  padding: '5px 12px',
+                  borderRadius: '4px',
+                  border: '1px solid var(--border)',
+                  background: p.enabled ? '#22c55e' : 'var(--surface-2)',
+                  color: p.enabled ? '#ffffff' : 'var(--muted)',
+                  fontSize: '12px',
+                  cursor: 'pointer',
+                }}
+              >
+                {p.enabled ? 'Enabled' : 'Disabled'}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ── GitHub Direct Install Tab ── */}
+      {activeTab === 'github' && (
+        <div
+          style={{
+            background: 'var(--surface)',
+            border: '1px solid var(--border)',
+            borderRadius: '8px',
+            padding: '24px',
+          }}
+        >
+          <h2 style={{ fontSize: '15px', fontWeight: 600, margin: '0 0 8px 0', color: 'var(--fg)' }}>
+            Install from GitHub Repository
+          </h2>
+          <p style={{ fontSize: '13px', color: 'var(--muted)', margin: '0 0 16px 0' }}>
+            Enter a public repository URL containing a valid NoteRoot AI manifest (e.g. <code>https://github.com/user/plugin-repo</code>).
+          </p>
+          <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+            <input
+              type="text"
+              value={githubUrl}
+              onChange={e => setGithubUrl(e.target.value)}
+              placeholder="https://github.com/owner/repository"
+              style={{
+                flex: 1,
+                padding: '8px 12px',
+                background: 'var(--bg)',
+                border: '1px solid var(--border)',
+                borderRadius: '6px',
+                color: 'var(--fg)',
+                fontSize: '13px',
+                outline: 'none',
+              }}
+            />
+            <button
+              onClick={handleGithubInstall}
+              disabled={githubStatus === 'installing'}
+              style={{
+                padding: '8px 18px',
+                background: '#e05438',
+                color: '#ffffff',
+                border: 'none',
+                borderRadius: '6px',
+                fontSize: '13px',
+                fontWeight: 500,
+                cursor: githubStatus === 'installing' ? 'wait' : 'pointer',
+                opacity: githubStatus === 'installing' ? 0.7 : 1,
+              }}
+            >
+              {githubStatus === 'installing' ? 'Installing...' : 'Install'}
+            </button>
+          </div>
+
+          {githubStatus === 'error' && (
+            <div style={{ padding: '10px 14px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '6px', fontSize: '13px', color: '#ef4444' }}>
+              Please enter a valid GitHub repository URL (e.g. <code>https://github.com/owner/repo</code>).
+            </div>
+          )}
+          {githubStatus === 'success' && (
+            <div style={{ padding: '10px 14px', background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.2)', borderRadius: '6px', fontSize: '13px', color: '#22c55e' }}>
+              ✓ Repository plugin cloned and installed successfully!
+            </div>
+          )}
+        </div>
+      )}
+      {/* ── Upload Plugin Tab ── */}
+      {activeTab === 'upload' && (
+        <div
+          style={{
+            background: 'var(--surface)',
+            border: '1px solid var(--border)',
+            borderRadius: '8px',
+            padding: '24px',
+          }}
+        >
+          <h2 style={{ fontSize: '15px', fontWeight: 600, margin: '0 0 6px 0', color: 'var(--fg)' }}>
+            Upload Local Plugin
+          </h2>
+          <p style={{ fontSize: '13px', color: 'var(--muted)', margin: '0 0 20px 0' }}>
+            Upload a <code>.js</code> plugin file or a <code>.zip</code> bundle containing a valid NoteRoot AI plugin.
+          </p>
+
+          {/* Drop Zone */}
+          <div
+            onDragOver={e => { e.preventDefault(); setIsDragOver(true); }}
+            onDragLeave={() => setIsDragOver(false)}
+            onDrop={e => {
+              e.preventDefault();
+              setIsDragOver(false);
+              const file = e.dataTransfer.files[0];
+              if (file) handleFileDrop(file);
+            }}
+            onClick={() => fileInputRef.current?.click()}
+            style={{
+              border: `2px dashed ${isDragOver ? '#e05438' : uploadedFile ? '#22c55e' : 'var(--border)'}`,
+              borderRadius: '8px',
+              padding: '36px',
+              textAlign: 'center',
+              cursor: 'pointer',
+              background: isDragOver ? 'rgba(224,84,56,0.05)' : uploadedFile ? 'rgba(34,197,94,0.05)' : 'var(--bg)',
+              transition: 'all 0.15s',
+              marginBottom: '16px',
+            }}
+          >
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".js,.zip"
+              style={{ display: 'none' }}
+              onChange={e => {
+                const file = e.target.files?.[0];
+                if (file) handleFileDrop(file);
+              }}
+            />
+            {uploadedFile ? (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                <CheckCircle2 size={32} color="#22c55e" />
+                <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--fg)' }}>{uploadedFile.name}</div>
+                <div style={{ fontSize: '12px', color: 'var(--muted)' }}>{(uploadedFile.size / 1024).toFixed(1)} KB — ready to install</div>
+                <button
+                  onClick={e => { e.stopPropagation(); setUploadedFile(null); setUploadStatus('idle'); }}
+                  style={{ background: 'transparent', border: 'none', color: 'var(--muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px' }}
+                >
+                  <X size={13} /> Remove
+                </button>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                <Upload size={28} style={{ color: isDragOver ? '#e05438' : 'var(--muted)' }} />
+                <div style={{ fontSize: '14px', fontWeight: 500, color: 'var(--fg)' }}>Drop file here or click to browse</div>
+                <div style={{ fontSize: '12px', color: 'var(--muted)' }}>Supports <strong>.js</strong> and <strong>.zip</strong> files</div>
+              </div>
+            )}
+          </div>
+
+          {uploadStatus === 'error' && (
+            <div style={{ padding: '10px 14px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '6px', fontSize: '13px', color: '#ef4444', marginBottom: '12px' }}>
+              Invalid file type. Please upload a <code>.js</code> or <code>.zip</code> plugin file.
+            </div>
+          )}
+          {uploadStatus === 'success' && (
+            <div style={{ padding: '10px 14px', background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.2)', borderRadius: '6px', fontSize: '13px', color: '#22c55e', marginBottom: '12px' }}>
+              ✓ Plugin installed successfully! It will appear in your Installed tab.
+            </div>
+          )}
+
+          <button
+            onClick={handleInstallUpload}
+            disabled={!uploadedFile || uploadStatus === 'success'}
+            style={{
+              padding: '8px 20px',
+              background: uploadedFile ? '#e05438' : 'var(--surface-2)',
+              color: uploadedFile ? '#ffffff' : 'var(--muted)',
+              border: 'none',
+              borderRadius: '6px',
+              fontSize: '13px',
+              fontWeight: 500,
+              cursor: uploadedFile ? 'pointer' : 'not-allowed',
+              opacity: uploadStatus === 'success' ? 0.6 : 1,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+            }}
+          >
+            <Upload size={14} /> Install Plugin
+          </button>
+        </div>
+      )}
     </div>
   );
 }

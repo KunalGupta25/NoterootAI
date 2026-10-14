@@ -172,6 +172,22 @@ export default function BlockMenu({ editor }: BlockMenuProps) {
         className="block-handle"
         onClick={handleOpenMenu}
         title="Drag to move • Click for options"
+        style={{
+          position: 'absolute',
+          left: '-28px',
+          width: '22px',
+          height: '24px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          cursor: 'pointer',
+          borderRadius: '4px',
+          color: 'var(--muted)',
+          opacity: 0,
+          transition: 'opacity 0.15s, background 0.12s, color 0.12s',
+          zIndex: 20,
+          userSelect: 'none',
+        }}
       >
         <GripVertical size={16} />
       </div>
@@ -181,42 +197,178 @@ export default function BlockMenu({ editor }: BlockMenuProps) {
         <div
           ref={menuRef}
           className="block-menu"
-          style={{ top: menuPos.top, left: menuPos.left }}
+          style={{
+            position: 'absolute',
+            top: menuPos.top,
+            left: menuPos.left,
+            zIndex: 9999,
+            minWidth: '190px',
+            background: 'var(--surface)',
+            border: '1px solid var(--border)',
+            borderRadius: '8px',
+            boxShadow: '0 8px 30px rgba(0, 0, 0, 0.18), 0 2px 6px rgba(0, 0, 0, 0.08)',
+            padding: '4px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '2px',
+            userSelect: 'none',
+          }}
         >
-          <button className="block-menu-item" onClick={handleDelete}>
-            <Trash2 size={14} />
+          <button
+            className="block-menu-item"
+            onClick={handleDelete}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              width: '100%',
+              padding: '6px 10px',
+              border: 'none',
+              borderRadius: '5px',
+              background: 'transparent',
+              color: 'var(--fg)',
+              fontSize: '13px',
+              cursor: 'pointer',
+              textAlign: 'left',
+            }}
+            onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-2)')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+          >
+            <Trash2 size={14} style={{ color: '#ef4444' }} />
             <span>Delete</span>
-            <span className="block-menu-shortcut">Del</span>
-          </button>
-          <button className="block-menu-item" onClick={handleDuplicate}>
-            <Copy size={14} />
-            <span>Duplicate</span>
-            <span className="block-menu-shortcut">⌘D</span>
-          </button>
-          <button className="block-menu-item" onClick={handleMoveUp}>
-            <ArrowUpDown size={14} />
-            <span>Move up</span>
-            <span className="block-menu-shortcut">⌥↑</span>
+            <span className="block-menu-shortcut" style={{ marginLeft: 'auto', fontSize: '11px', color: 'var(--muted)' }}>Del</span>
           </button>
 
-          <div className="block-menu-divider" />
+          <button
+            className="block-menu-item"
+            onClick={handleDuplicate}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              width: '100%',
+              padding: '6px 10px',
+              border: 'none',
+              borderRadius: '5px',
+              background: 'transparent',
+              color: 'var(--fg)',
+              fontSize: '13px',
+              cursor: 'pointer',
+              textAlign: 'left',
+            }}
+            onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-2)')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+          >
+            <Copy size={14} />
+            <span>Duplicate</span>
+            <span className="block-menu-shortcut" style={{ marginLeft: 'auto', fontSize: '11px', color: 'var(--muted)' }}>⌘D</span>
+          </button>
+
+          <button
+            className="block-menu-item"
+            onClick={handleMoveUp}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              width: '100%',
+              padding: '6px 10px',
+              border: 'none',
+              borderRadius: '5px',
+              background: 'transparent',
+              color: 'var(--fg)',
+              fontSize: '13px',
+              cursor: 'pointer',
+              textAlign: 'left',
+            }}
+            onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-2)')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+          >
+            <ArrowUpDown size={14} />
+            <span>Move up</span>
+            <span className="block-menu-shortcut" style={{ marginLeft: 'auto', fontSize: '11px', color: 'var(--muted)' }}>⌥↑</span>
+          </button>
+
+          <div
+            className="block-menu-divider"
+            style={{ height: '1px', background: 'var(--border)', margin: '3px 0', width: '100%' }}
+          />
 
           <div style={{ position: 'relative' }}>
             <button
               className="block-menu-item"
               onClick={() => setShowConvert(!showConvert)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                width: '100%',
+                padding: '6px 10px',
+                border: 'none',
+                borderRadius: '5px',
+                background: 'transparent',
+                color: 'var(--fg)',
+                fontSize: '13px',
+                cursor: 'pointer',
+                textAlign: 'left',
+              }}
+              onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-2)')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
             >
-              <ChevronRight size={14} style={{ transform: showConvert ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' }} />
+              <ChevronRight
+                size={14}
+                style={{
+                  transform: showConvert ? 'rotate(90deg)' : 'none',
+                  transition: 'transform 0.15s',
+                  color: 'var(--muted)',
+                }}
+              />
               <span>Turn into...</span>
             </button>
 
             {showConvert && (
-              <div className="block-menu-sub">
+              <div
+                className="block-menu-sub"
+                style={{
+                  position: 'absolute',
+                  left: '100%',
+                  top: '-4px',
+                  marginLeft: '6px',
+                  minWidth: '160px',
+                  maxHeight: '260px',
+                  overflowY: 'auto',
+                  background: 'var(--surface)',
+                  border: '1px solid var(--border)',
+                  borderRadius: '8px',
+                  boxShadow: '0 8px 30px rgba(0, 0, 0, 0.18), 0 2px 6px rgba(0, 0, 0, 0.08)',
+                  padding: '4px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '2px',
+                  zIndex: 10000,
+                }}
+              >
                 {CONVERT_OPTIONS.map(opt => (
                   <button
                     key={opt.label}
                     className="block-menu-item"
                     onClick={() => handleConvert(opt.nodeType, opt.attrs)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      width: '100%',
+                      padding: '6px 10px',
+                      border: 'none',
+                      borderRadius: '5px',
+                      background: 'transparent',
+                      color: 'var(--fg)',
+                      fontSize: '12.5px',
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                    }}
+                    onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-2)')}
+                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                   >
                     <span>{opt.label}</span>
                   </button>

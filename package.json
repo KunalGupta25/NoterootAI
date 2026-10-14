@@ -6,11 +6,9 @@
   "scripts": {
     "dev:client": "cd client && npm run dev",
     "dev:backend": "cd backend && .\\.venv\\Scripts\\python -m uvicorn main:app --reload",
-    "dev:server": "cd server && npm run dev",
-    "dev:ai": "cd ai-service && .\\venv\\Scripts\\python -m uvicorn main:app --reload",
+
     "dev": "concurrently -n \"CLIENT,BACKEND\" -c \"cyan,yellow\" \"npm run dev:client\" \"npm run dev:backend\"",
-    "dev:legacy": "concurrently -n \"CLIENT,SERVER,AI\" -c \"cyan,magenta,yellow\" \"npm run dev:client\" \"npm run dev:server\" \"npm run dev:ai\"",
-    "install:all": "npm install && cd client && npm install && cd ../server && npm install",
+    "install:all": "npm install && cd client && npm install",
     "setup:backend": "cd backend && python -m venv .venv && .\\.venv\\Scripts\\python -m pip install -r requirements.txt"
   },
   "devDependencies": {

@@ -59,6 +59,7 @@ def create_app() -> FastAPI:
     async def http_exception_handler(_: Request, error: HTTPException) -> JSONResponse:
         return JSONResponse(status_code=error.status_code, content={"error": error.detail})
 
+    @app.get("/health")
     @app.get("/api/health")
     async def health() -> dict[str, str]:
         return {"status": "ok", "message": "NoteRoot API is running"}

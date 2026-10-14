@@ -2,94 +2,117 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import cytoscape from 'cytoscape';
 import { useNoteStore } from '../stores/noteStore';
 import { useNavigate } from 'react-router-dom';
-import { RefreshCw, ZoomIn, ZoomOut, Maximize2, Info, X } from 'lucide-react';
+import {
+  Network, Search, ZoomIn, ZoomOut, RotateCcw,
+  Maximize2, BookOpen, Plus, LayoutGrid,
+  CircleDot, GitFork
+} from 'lucide-react';
+import { TUTORIAL_NOTE_CONTENT } from '../components/Onboarding/OnboardingModal';
 
-type NodeInfo = { id: string; title: string; icon: string; parentTitle?: string; childCount: number; linkCount: number };
+type LayoutMode = 'cose' | 'concentric' | 'breadthfirst';
 
 export default function GraphPage() {
   const containerRef = useRef<HTMLDivElement>(null);
   const cyRef = useRef<cytoscape.Core | null>(null);
-  const { notes } = useNoteStore();
+  const { notes, saveNote } = useNoteStore();
   const navigate = useNavigate();
-  const [selectedNode, setSelectedNode] = useState<NodeInfo | null>(null);
-  const [stats, setStats] = useState({ nodes: 0, edges: 0 });
 
-  // Build elements from local vault
+  const [searchQuery, setSearchQuery] = useState('');
+  const [layoutMode, setLayoutMode] = useState<LayoutMode>('cose');
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [nodeCount, setNodeCount] = useState(0);
+  const [edgeCount, setEdgeCount] = useState(0);
+
+  // Build real elements from user's vault notes
   const buildElements = useCallback((): cytoscape.ElementDefinition[] => {
     const elements: cytoscape.ElementDefinition[] = [];
-    const edgesAdded = new Set<string>();
+    const edgeSet = new Set<string>();
 
-    // Add central NoteRoot node
-    elements.push({
-      data: {
-        id: '__noteroot_center__',
-        label: 'NoteRoot',
-        icon: '🌌',
-        type: 'center',
-        linkCount: 0,
-      }
-    });
+    const colorPalette = [
+      '#e05438', '#3b82f6', '#22c55e', '#eab308', '#a855f7', '#06b6d4'
+    ];
 
-    const depths = new Map<string, number>();
-    const getDepth = (noteId: string, visited = new Set<string>()): number => {
-      if (depths.has(noteId)) return depths.get(noteId)!;
-      if (visited.has(noteId)) return 1;
-      visited.add(noteId);
-      const note = notes.find(n => n._id === noteId);
-      if (!note || !note.parentId) {
-        depths.set(noteId, 1);
-        return 1;
-      }
-      const d = 1 + getDepth(note.parentId, visited);
-      depths.set(noteId, d);
-      return d;
-    };
-
-    notes.forEach(note => {
-      // Count wiki-links this note has
-      const wikiLinks = (note.content.match(/\[\[([^\]]+)\]\]/g) || []).length;
+    // Add nodes for every real note
+    notes.forEach((note, idx) => {
+      const color = colorPalette[idx % colorPalette.length];
       elements.push({
         data: {
           id: note._id,
           label: note.title || 'Untitled',
           icon: note.icon || '📄',
-          type: note.parentId ? 'child' : 'root',
-          depth: getDepth(note._id),
-          linkCount: wikiLinks,
+          color,
+          parentId: note.parentId,
         },
       });
     });
 
+    // 1. Hierarchy edges (Parent -> Child sub-pages)
     notes.forEach(note => {
-      // Link root pages to the central NoteRoot node
-      if (!note.parentId) {
-        const eid = `c___noteroot_center__${note._id}`;
-        if (!edgesAdded.has(eid)) {
-          edgesAdded.add(eid);
-          elements.push({ data: { id: eid, source: '__noteroot_center__', target: note._id, edgeType: 'center_link' } });
+      if (note.parentId && notes.some(p => p._id === note.parentId)) {
+        const edgeId = `hier_${note.parentId}_${note._id}`;
+        if (!edgeSet.has(edgeId)) {
+          edgeSet.add(edgeId);
+          elements.push({
+            data: {
+              id: edgeId,
+              source: note.parentId,
+              target: note._id,
+              edgeType: 'hierarchy',
+            },
+          });
         }
       }
+    });
 
-      // Parent → child hierarchy edges (dashed)
-      if (note.parentId && notes.find(n => n._id === note.parentId)) {
-        const eid = `h_${note.parentId}_${note._id}`;
-        if (!edgesAdded.has(eid)) {
-          edgesAdded.add(eid);
-          elements.push({ data: { id: eid, source: note.parentId, target: note._id, edgeType: 'hierarchy' } });
-        }
-      }
-
-      // [[Wiki-link]] edges (solid)
+    // 2. [[Wiki-link]] edges
+    notes.forEach(note => {
+      if (!note.content) return;
       const wikiRegex = /\[\[([^\]]+)\]\]/g;
-      let m: RegExpExecArray | null;
-      while ((m = wikiRegex.exec(note.content)) !== null) {
-        const targetTitle = m[1].trim().toLowerCase();
-        const target = notes.find(n => n.title.toLowerCase() === targetTitle);
-        if (target && target._id !== note._id) {
-          const eid = `w_${note._id}_${target._id}`;
-          if (!edgesAdded.has(eid)) {
-            edgesAdded.add(eid);
-            elements.push({ data: { id: eid, source: note._id, target: target._id, edgeType: 'wiki' } });
+      let match: RegExpExecArray | null;
+      while ((match = wikiRegex.exec(note.content)) !== null) {
+        const targetTitle = match[1].trim().toLowerCase();
+        const targetNote = notes.find(n => (n.title || '').trim().toLowerCase() === targetTitle);
+        if (targetNote && targetNote._id !== note._id) {
+          const edgeId = `wiki_${note._id}_${targetNote._id}`;
+          if (!edgeSet.has(edgeId)) {
+            edgeSet.add(edgeId);
+            elements.push({
+              data: {
+                id: edgeId,
+                source: note._id,
+                target: targetNote._id,
+                edgeType: 'wiki',
+              },
+            });
+          }
+        }
+      }
+    });
+
+    // 3. Shared Tag connections (if notes have common tags)
+    const tagMap = new Map<string, string[]>();
+    notes.forEach(note => {
+      (note.tags || []).forEach(tag => {
+        const list = tagMap.get(tag) || [];
+        list.push(note._id);
+        tagMap.set(tag, list);
+      });
+    });
+
+    tagMap.forEach((noteIds, tag) => {
+      if (noteIds.length > 1 && noteIds.length <= 5) {
+        for (let i = 0; i < noteIds.length - 1; i++) {
+          const edgeId = `tag_${tag}_${noteIds[i]}_${noteIds[i + 1]}`;
+          if (!edgeSet.has(edgeId)) {
+            edgeSet.add(edgeId);
+            elements.push({
+              data: {
+                id: edgeId,
+                source: noteIds[i],
+                target: noteIds[i + 1],
+                edgeType: 'tag',
+              },
+            });
           }
         }
       }
@@ -97,6 +120,48 @@ export default function GraphPage() {
 
     return elements;
   }, [notes]);
+
+  const getLayoutOptions = useCallback((mode: LayoutMode) => {
+    switch (mode) {
+      case 'concentric':
+        return {
+          name: 'concentric',
+          animate: true,
+          animationDuration: 600,
+          padding: 80,
+          spacingFactor: 1.6,
+          concentric: (node: any) => node.degree(),
+          levelWidth: () => 1,
+        };
+      case 'breadthfirst':
+        return {
+          name: 'breadthfirst',
+          animate: true,
+          animationDuration: 600,
+          directed: true,
+          padding: 80,
+          spacingFactor: 1.5,
+        };
+      case 'cose':
+      default:
+        return {
+          name: 'cose',
+          animate: true,
+          animationDuration: 700,
+          nodeDimensionsIncludeLabels: true, // Prevents labels from overlapping!
+          nodeRepulsion: () => 350000,       // Large repulsion ensures human readability
+          idealEdgeLength: () => 180,        // Long spacious edges
+          edgeElasticity: () => 32,
+          nestingFactor: 0.1,
+          gravity: 0.18,                     // Low gravity prevents meshing
+          numIter: 1000,
+          initialTemp: 200,
+          coolingFactor: 0.95,
+          minTemp: 1.0,
+          padding: 80,
+        };
+    }
+  }, []);
 
   const initGraph = useCallback(() => {
     if (!containerRef.current) return;
@@ -106,401 +171,574 @@ export default function GraphPage() {
       cyRef.current = null;
     }
 
-    const elements = notes.length > 0 ? buildElements() : [
-      { data: { id: '__empty__', label: 'Create your first page', type: 'root', linkCount: 0 } },
-    ];
+    const elements = buildElements();
+    const nodeElems = elements.filter(e => !('source' in e.data));
+    const edgeElems = elements.filter(e => 'source' in e.data);
+    setNodeCount(nodeElems.length);
+    setEdgeCount(edgeElems.length);
+
+    if (nodeElems.length === 0) return;
 
     cyRef.current = cytoscape({
       container: containerRef.current,
       elements,
       style: [
-        // ── Default node: small white dot ──
+        // ── Human-Readable Node Styling with Badges ──
         {
           selector: 'node',
           style: {
-            'background-color': '#b0b8c8',
-            'border-width': 0,
-            'label': 'data(label)',
-            'color': '#c8cdd8',
-            'font-size': '10px',
-            'font-family': 'Inter, -apple-system, sans-serif',
-            'font-weight': 400,
-            'width': 10,
-            'height': 10,
-            'text-valign': 'bottom',
-            'text-halign': 'center',
-            'text-margin-y': 5,
-            'text-max-width': '90px',
-            'text-wrap': 'ellipsis',
-            'text-background-opacity': 0,
-          } as any,
-        },
-        // ── Root page: slightly larger, brighter (Depth 1) ──
-        {
-          selector: 'node[type = "root"]',
-          style: {
-            'background-color': '#60a5fa', // Blue
+            'background-color': 'data(color)',
             'width': 18,
             'height': 18,
-            'font-size': '11px',
+            'border-width': 2,
+            'border-color': 'var(--surface)',
+            'label': 'data(label)',
+            'color': 'var(--fg)',
+            'font-size': '11.5px',
+            'font-family': "'Inter', system-ui, -apple-system, sans-serif",
             'font-weight': 600,
-            'color': '#bfdbfe',
+            'text-valign': 'bottom',
+            'text-halign': 'center',
+            'text-margin-y': 6,
+            'text-wrap': 'ellipsis',
+            'text-max-width': '120px',
+            // Text box halo for crystal clear readability
+            'text-background-opacity': 0.88,
+            'text-background-color': 'var(--surface)',
+            'text-background-padding': '3px',
+            'text-background-shape': 'roundrectangle',
+            'text-border-width': 1,
+            'text-border-color': 'var(--border)',
+            'transition-property': 'opacity, border-color, border-width, background-color',
+            'transition-duration': 0.15,
           } as any,
         },
-        // ── Center node: NoteRoot ──
+        // ── Edges ──
         {
-          selector: 'node[type = "center"]',
-          style: {
-            'background-color': '#eab308', // Yellow
-            'width': 26,
-            'height': 26,
-            'font-size': '15px',
-            'font-weight': 700,
-            'color': '#fef08a',
-            'border-width': 3,
-            'border-color': '#fde047',
-          } as any,
-        },
-        // ── Center link edges ──
-        {
-          selector: 'edge[edgeType = "center_link"]',
+          selector: 'edge',
           style: {
             'width': 1.5,
-            'line-color': '#475569',
+            'line-color': 'rgba(150, 150, 150, 0.35)',
             'curve-style': 'bezier',
+            'target-arrow-shape': 'triangle',
+            'target-arrow-color': 'rgba(150, 150, 150, 0.45)',
+            'arrow-scale': 0.6,
+            'transition-property': 'opacity, line-color, width',
+            'transition-duration': 0.15,
           } as any,
         },
-        // ── Child / sub-page (Depth 2) ──
-        {
-          selector: 'node[type = "child"][depth = 2]',
-          style: {
-            'background-color': '#34d399', // Emerald
-            'width': 12,
-            'height': 12,
-            'font-size': '10px',
-            'color': '#a7f3d0',
-          } as any,
-        },
-        // ── Child / sub-page (Depth >= 3) ──
-        {
-          selector: 'node[type = "child"][depth >= 3]',
-          style: {
-            'background-color': '#c084fc', // Purple
-            'width': 9,
-            'height': 9,
-            'font-size': '9px',
-            'color': '#e9d5ff',
-          } as any,
-        },
-        // ── Selected node: accent glow ──
-        {
-          selector: 'node:selected',
-          style: {
-            'background-color': '#c9a96e',
-            'border-width': 2,
-            'border-color': '#e8c97e',
-            'width': 20,
-            'height': 20,
-          } as any,
-        },
-        // ── Wiki-link edges: thin solid directional ──
         {
           selector: 'edge[edgeType = "wiki"]',
           style: {
-            'width': 1,
-            'line-color': '#3a4256',
-            'target-arrow-color': '#4a5268',
-            'target-arrow-shape': 'triangle',
-            'arrow-scale': 0.6,
-            'curve-style': 'bezier',
+            'line-color': 'rgba(224, 84, 56, 0.45)',
+            'target-arrow-color': '#e05438',
+            'width': 1.8,
           } as any,
         },
-        // ── Hierarchy edges: very thin dashed ──
         {
           selector: 'edge[edgeType = "hierarchy"]',
           style: {
-            'width': 0.8,
-            'line-color': '#2d3448',
             'line-style': 'dashed',
             'line-dash-pattern': [4, 4],
-            'target-arrow-color': '#2d3448',
-            'target-arrow-shape': 'vee',
-            'arrow-scale': 0.5,
-            'curve-style': 'bezier',
+            'line-color': 'rgba(59, 130, 246, 0.45)',
+            'target-arrow-color': '#3b82f6',
           } as any,
         },
-        // ── Highlighted neighbours ──
+        // ── Highlighted / Dimmed states ──
         {
           selector: 'node.highlighted',
           style: {
-            'background-color': '#c9a96e',
-            'color': '#f0e0b8',
-            'font-size': '11px',
-          } as any,
-        },
-        {
-          selector: 'node.dimmed',
-          style: {
-            'background-color': '#2a2f3e',
-            'color': '#3a4256',
+            'border-width': 3,
+            'border-color': '#e05438',
+            'width': 24,
+            'height': 24,
+            'font-size': '13px',
+            'z-index': 100,
           } as any,
         },
         {
           selector: 'edge.highlighted',
-          style: { 'line-color': '#c9a96e', 'target-arrow-color': '#c9a96e', 'width': 1.5 } as any,
+          style: {
+            'line-color': '#e05438',
+            'target-arrow-color': '#e05438',
+            'width': 2.5,
+            'z-index': 90,
+          } as any,
         },
         {
-          selector: 'edge.dimmed',
-          style: { 'line-color': '#1e2230', 'target-arrow-color': '#1e2230' } as any,
+          selector: '.dimmed',
+          style: {
+            'opacity': 0.15,
+          } as any,
         },
       ],
-      layout: {
-        name: 'cose',
-        padding: 40,
-        nodeRepulsion: () => 60000,
-        idealEdgeLength: () => 60,
-        edgeElasticity: () => 100,
-        nestingFactor: 5,
-        gravity: 0.25,
-        numIter: 1200,
-        initialTemp: 250,
-        coolingFactor: 0.96,
-        minTemp: 1.0,
-        animate: true,
-        animationDuration: 600,
-        fit: true,
-      } as any,
-      minZoom: 0.2,
-      maxZoom: 4,
+      layout: getLayoutOptions(layoutMode) as any,
     });
 
-    setStats({
-      nodes: cyRef.current.nodes().length,
-      edges: cyRef.current.edges().length,
-    });
-
-    // Pull children when dragging a parent
-    let dragPos = { x: 0, y: 0 };
-    
-    cyRef.current.on('grab', 'node', (evt) => {
-      dragPos = { ...evt.target.position() };
-    });
-
-    cyRef.current.on('drag', 'node', (evt) => {
-      if (!cyRef.current) return;
+    // Node click handler: Highlight neighborhood & navigate on double click
+    cyRef.current.on('tap', 'node', (evt) => {
       const node = evt.target;
-      const pos = node.position();
-      const dx = pos.x - dragPos.x;
-      const dy = pos.y - dragPos.y;
-      dragPos = { ...pos };
+      const id = node.id();
+      setSelectedNodeId(id);
 
-      // Recursively find all descendants through hierarchy or center links
-      const getDescendants = (n: cytoscape.NodeSingular, set = new Set<cytoscape.NodeSingular>()) => {
-        n.outgoers('edge[edgeType="hierarchy"], edge[edgeType="center_link"]').targets().forEach(child => {
-          if (!set.has(child)) {
-            set.add(child);
-            getDescendants(child, set);
-          }
-        });
-        return set;
-      };
-
-      const descendants = getDescendants(node);
-      descendants.forEach(child => {
-        if (!child.grabbed()) {
-          const p = child.position();
-          child.position({ x: p.x + dx, y: p.y + dy });
-        }
-      });
+      // Neighborhood highlight
+      const neighborhood = node.neighborhood().add(node);
+      cyRef.current?.elements().removeClass('highlighted dimmed');
+      cyRef.current?.elements().not(neighborhood).addClass('dimmed');
+      neighborhood.addClass('highlighted');
     });
 
-    // Hover highlight neighbours
-    cyRef.current.on('mouseover', 'node', evt => {
-      if (!cyRef.current) return;
-      const node = evt.target;
-      const cy = cyRef.current;
-      cy.elements().addClass('dimmed');
-      node.removeClass('dimmed').addClass('highlighted');
-      node.neighborhood().removeClass('dimmed').addClass('highlighted');
+    // Double tap: navigate directly to the note
+    cyRef.current.on('dbltap', 'node', (evt) => {
+      const id = evt.target.id();
+      navigate(`/notes/${id}`);
     });
 
-    cyRef.current.on('mouseout', 'node', () => {
-      cyRef.current?.elements().removeClass('dimmed highlighted');
+    // Background tap: reset highlight
+    cyRef.current.on('tap', (evt) => {
+      if (evt.target === cyRef.current) {
+        setSelectedNodeId(null);
+        cyRef.current?.elements().removeClass('highlighted dimmed');
+      }
     });
-
-    // Single click → show info panel
-    cyRef.current.on('tap', 'node', evt => {
-      if (!cyRef.current) return;
-      const node = evt.target;
-      const nid = node.id();
-      if (nid === '__empty__' || nid === '__noteroot_center__') return;
-      const noteData = notes.find(n => n._id === nid);
-      if (!noteData) return;
-      const parent = noteData.parentId ? notes.find(n => n._id === noteData.parentId) : undefined;
-      const childCount = notes.filter(n => n.parentId === nid).length;
-      const linkCount = cyRef.current!.edges(`[source = "${nid}"][edgeType = "wiki"]`).length;
-      setSelectedNode({
-        id: nid,
-        title: noteData.title,
-        icon: noteData.icon || '📄',
-        parentTitle: parent?.title,
-        childCount,
-        linkCount,
-      });
-    });
-
-    // Double-click → navigate
-    cyRef.current.on('dblclick', 'node', evt => {
-      if (!cyRef.current) return;
-      const nid = evt.target.id();
-      if (nid !== '__empty__' && nid !== '__noteroot_center__') navigate(`/notes/${nid}`);
-    });
-
-    cyRef.current.on('tap', evt => {
-      if (!cyRef.current) return;
-      if (evt.target === cyRef.current) setSelectedNode(null);
-    });
-  }, [notes, navigate, buildElements]);
+  }, [buildElements, getLayoutOptions, layoutMode, navigate]);
 
   useEffect(() => {
     initGraph();
     return () => {
-      // Null FIRST so any in-flight animation frames see null and bail
-      const cy = cyRef.current;
-      cyRef.current = null;
-      cy?.destroy();
+      if (cyRef.current) {
+        cyRef.current.destroy();
+        cyRef.current = null;
+      }
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [notes]);
+  }, [initGraph]);
+
+  // Live search filter
+  useEffect(() => {
+    if (!cyRef.current) return;
+    if (!searchQuery.trim()) {
+      cyRef.current.elements().removeClass('dimmed');
+      return;
+    }
+    const q = searchQuery.toLowerCase();
+    const matched = cyRef.current.nodes().filter(n =>
+      (n.data('label') || '').toLowerCase().includes(q)
+    );
+    cyRef.current.elements().addClass('dimmed');
+    matched.removeClass('dimmed').addClass('highlighted');
+  }, [searchQuery]);
+
+  const handleCreateTutorial = async () => {
+    const id = await saveNote({
+      title: 'Welcome & Tutorial Guide',
+      content: TUTORIAL_NOTE_CONTENT,
+      icon: '📚',
+      parentId: null,
+      tags: ['Tutorial', 'Getting Started'],
+    });
+    navigate(`/notes/${id}`);
+  };
+
+  const handleNewNote = async () => {
+    const id = await saveNote({
+      title: 'Untitled Note',
+      parentId: null,
+      icon: '📄',
+      tags: ['Ideas'],
+    });
+    navigate(`/notes/${id}`);
+  };
 
   return (
-    <div style={{ maxWidth: '960px', margin: '0 auto' }}>
-      <div className="mono kicker">Knowledge Graph</div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
-        <div>
-          <h2 style={{ margin: 0, fontSize: '22px', fontFamily: 'var(--font-display)' }}>Connection Map</h2>
-          <p style={{ margin: '4px 0 0', color: 'var(--muted)', fontSize: '13px' }}>
-            {stats.nodes} nodes · {stats.edges} connections · Hover to highlight · Double-click to open
-          </p>
-        </div>
-        <div style={{ display: 'flex', gap: '6px' }}>
-          <button onClick={() => initGraph()} title="Rebuild graph" style={{ padding: '6px 10px' }}>
-            <RefreshCw size={14} />
-          </button>
-          <button onClick={() => cyRef.current?.zoom(cyRef.current.zoom() * 1.3)} title="Zoom in" style={{ padding: '6px 10px' }}>
-            <ZoomIn size={14} />
-          </button>
-          <button onClick={() => cyRef.current?.zoom(cyRef.current.zoom() * 0.77)} title="Zoom out" style={{ padding: '6px 10px' }}>
-            <ZoomOut size={14} />
-          </button>
-          <button onClick={() => cyRef.current?.fit(undefined, 40)} title="Fit screen" style={{ padding: '6px 10px' }}>
-            <Maximize2 size={14} />
-          </button>
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100%',
+        width: '100%',
+        overflow: 'hidden',
+        background: 'var(--bg)',
+        boxSizing: 'border-box',
+      }}
+    >
+      {/* ── Top Header ── */}
+      <div
+        style={{
+          padding: '20px 32px 14px',
+          display: 'flex',
+          alignItems: 'flex-start',
+          justifyContent: 'space-between',
+          borderBottom: '1px solid var(--border)',
+          background: 'var(--surface)',
+          flexShrink: 0,
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div
+            style={{
+              width: '38px',
+              height: '38px',
+              borderRadius: '50%',
+              background: 'rgba(224, 84, 56, 0.1)',
+              border: '1px solid rgba(224, 84, 56, 0.2)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#e05438',
+              flexShrink: 0,
+            }}
+          >
+            <Network size={20} />
+          </div>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <h1
+                style={{
+                  fontSize: '20px',
+                  fontWeight: 700,
+                  letterSpacing: '-0.3px',
+                  margin: 0,
+                  color: 'var(--fg)',
+                }}
+              >
+                Knowledge Graph
+              </h1>
+              <span
+                style={{
+                  fontSize: '11px',
+                  padding: '2px 8px',
+                  borderRadius: '12px',
+                  background: 'var(--surface-2)',
+                  color: 'var(--muted)',
+                  border: '1px solid var(--border)',
+                }}
+              >
+                {nodeCount} nodes • {edgeCount} connections
+              </span>
+            </div>
+            <p style={{ fontSize: '13px', color: 'var(--muted)', margin: '3px 0 0' }}>
+              Spacious 2D network visualizing notes, wiki-links, and space hierarchies.
+            </p>
+          </div>
         </div>
       </div>
 
-      {/* Graph canvas */}
-      <div style={{
-        position: 'relative', height: '600px',
-        borderRadius: '8px', overflow: 'hidden',
-        border: '1px solid #1e2230',
-        background: 'linear-gradient(135deg, #0d1017 0%, #111520 50%, #0d1017 100%)',
-      }}>
-        <div ref={containerRef} style={{ position: 'absolute', inset: 0 }} />
-
-        {/* Legend */}
-        <div style={{
-          position: 'absolute', bottom: '14px', left: '14px',
-          background: 'rgba(13,16,23,0.85)', border: '1px solid #1e2a3a',
-          borderRadius: '8px', padding: '10px 14px', fontSize: '11px',
-          backdropFilter: 'blur(6px)',
-        }}>
-          <div style={{ color: '#5a6280', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '6px', fontSize: '10px' }}>Legend</div>
-          {[
-            { dot: '#eab308', size: 16, label: 'NoteRoot (Center)' },
-            { dot: '#60a5fa', size: 14, label: 'Root (Level 1)' },
-            { dot: '#34d399', size: 10, label: 'Sub-page (Level 2)' },
-            { dot: '#c084fc', size: 8,  label: 'Sub-page (Level 3+)' },
-            { dot: '#c9a96e', size: 10, label: 'Selected' },
-          ].map(({ dot, size, label }) => (
-            <div key={label} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', color: '#8892a4' }}>
-              <div style={{ width: size, height: size, borderRadius: '50%', background: dot, flexShrink: 0 }} />
-              {label}
-            </div>
-          ))}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#8892a4', marginTop: '2px' }}>
-            <div style={{ width: '18px', height: '1px', borderTop: '1px solid #3a4256' }} /> Wiki-link
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#8892a4', marginTop: '4px' }}>
-            <div style={{ width: '18px', height: '1px', borderTop: '1px dashed #2d3448' }} /> Hierarchy
-          </div>
+      {/* ── Filter & Layout Toolbar ── */}
+      <div
+        style={{
+          padding: '8px 32px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '10px',
+          borderBottom: '1px solid var(--border)',
+          background: 'var(--surface)',
+          flexShrink: 0,
+          flexWrap: 'wrap',
+        }}
+      >
+        {/* Layout Mode Toggles */}
+        <div style={{ display: 'flex', gap: '4px', background: 'var(--surface-2)', padding: '3px', borderRadius: '6px' }}>
+          <button
+            onClick={() => setLayoutMode('cose')}
+            title="Spacious Force Layout (COSE)"
+            style={{
+              padding: '4px 10px',
+              borderRadius: '4px',
+              border: 'none',
+              background: layoutMode === 'cose' ? 'var(--surface)' : 'transparent',
+              color: layoutMode === 'cose' ? '#e05438' : 'var(--muted)',
+              fontSize: '12px',
+              fontWeight: 500,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              boxShadow: layoutMode === 'cose' ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
+            }}
+          >
+            <GitFork size={13} /> Spacious Force
+          </button>
+          <button
+            onClick={() => setLayoutMode('concentric')}
+            title="Concentric Rings Layout"
+            style={{
+              padding: '4px 10px',
+              borderRadius: '4px',
+              border: 'none',
+              background: layoutMode === 'concentric' ? 'var(--surface)' : 'transparent',
+              color: layoutMode === 'concentric' ? '#e05438' : 'var(--muted)',
+              fontSize: '12px',
+              fontWeight: 500,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              boxShadow: layoutMode === 'concentric' ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
+            }}
+          >
+            <CircleDot size={13} /> Concentric
+          </button>
+          <button
+            onClick={() => setLayoutMode('breadthfirst')}
+            title="Tree Hierarchy Layout"
+            style={{
+              padding: '4px 10px',
+              borderRadius: '4px',
+              border: 'none',
+              background: layoutMode === 'breadthfirst' ? 'var(--surface)' : 'transparent',
+              color: layoutMode === 'breadthfirst' ? '#e05438' : 'var(--muted)',
+              fontSize: '12px',
+              fontWeight: 500,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              boxShadow: layoutMode === 'breadthfirst' ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
+            }}
+          >
+            <LayoutGrid size={13} /> Hierarchy
+          </button>
         </div>
 
-        {/* Node info panel */}
-        {selectedNode && (
-          <div style={{
-            position: 'absolute', top: '14px', right: '14px',
-            background: 'rgba(13,16,23,0.92)', border: '1px solid #1e2a3a',
-            borderRadius: '10px', padding: '14px 16px', minWidth: '200px',
-            backdropFilter: 'blur(8px)',
-            boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ fontSize: '22px' }}>{selectedNode.icon}</span>
-                <div>
-                  <div style={{ fontWeight: 600, fontSize: '14px', color: '#dde3f0' }}>{selectedNode.title}</div>
-                  {selectedNode.parentTitle && (
-                    <div style={{ fontSize: '11px', color: '#5a6280', marginTop: '2px' }}>↳ {selectedNode.parentTitle}</div>
-                  )}
-                </div>
-              </div>
-              <button onClick={() => setSelectedNode(null)} style={{ background: 'none', border: 'none', color: '#5a6280', cursor: 'pointer', padding: '2px', display: 'flex' }}>
-                <X size={14} />
+        {/* Live Search nodes */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            marginLeft: 'auto',
+            background: 'var(--bg)',
+            border: '1px solid var(--border)',
+            borderRadius: '6px',
+            padding: '4px 10px',
+            width: '210px',
+          }}
+        >
+          <Search size={14} style={{ color: 'var(--muted)', flexShrink: 0 }} />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            placeholder="Search nodes..."
+            style={{
+              border: 'none',
+              outline: 'none',
+              background: 'transparent',
+              color: 'var(--fg)',
+              fontSize: '12.5px',
+              width: '100%',
+            }}
+          />
+        </div>
+      </div>
+
+      {/* ── Cytoscape Canvas Container ── */}
+      <div
+        style={{
+          flex: 1,
+          position: 'relative',
+          overflow: 'hidden',
+          background: 'var(--bg)',
+        }}
+      >
+        <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
+
+        {/* Empty state if vault has no notes */}
+        {nodeCount === 0 && (
+          <div
+            style={{
+              position: 'absolute',
+              top: '50%',
+              left: '50%',
+              transform: 'translate(-50%, -50%)',
+              textAlign: 'center',
+              background: 'var(--surface)',
+              border: '1px solid var(--border)',
+              borderRadius: '12px',
+              padding: '32px 40px',
+              boxShadow: '0 8px 30px rgba(0,0,0,0.12)',
+              maxWidth: '380px',
+            }}
+          >
+            <div style={{ fontSize: '36px', marginBottom: '8px' }}>🕸️</div>
+            <h3 style={{ fontSize: '16px', fontWeight: 600, color: 'var(--fg)', margin: '0 0 6px' }}>
+              Your graph is waiting for notes
+            </h3>
+            <p style={{ fontSize: '13px', color: 'var(--muted)', margin: '0 0 16px', lineHeight: 1.5 }}>
+              Create pages and link them with <code>[[Page Title]]</code> to watch your personal knowledge network grow.
+            </p>
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
+              <button
+                onClick={handleCreateTutorial}
+                style={{
+                  background: 'var(--surface-2)',
+                  color: 'var(--fg)',
+                  border: '1px solid var(--border)',
+                  borderRadius: '6px',
+                  padding: '7px 12px',
+                  fontSize: '12.5px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                }}
+              >
+                <BookOpen size={14} color="#e05438" /> Add Tutorial Note
+              </button>
+              <button
+                onClick={handleNewNote}
+                style={{
+                  background: '#e05438',
+                  color: '#ffffff',
+                  border: 'none',
+                  borderRadius: '6px',
+                  padding: '7px 14px',
+                  fontSize: '12.5px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                }}
+              >
+                <Plus size={14} /> New Note
               </button>
             </div>
-            <div style={{ display: 'flex', gap: '12px', marginBottom: '12px' }}>
-              <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: '16px', fontWeight: 700, color: '#c9a96e' }}>{selectedNode.childCount}</div>
-                <div style={{ fontSize: '10px', color: '#5a6280' }}>sub-pages</div>
-              </div>
-              <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: '16px', fontWeight: 700, color: '#c9a96e' }}>{selectedNode.linkCount}</div>
-                <div style={{ fontSize: '10px', color: '#5a6280' }}>wiki-links</div>
-              </div>
+          </div>
+        )}
+
+        {/* Selected Node Details Card */}
+        {selectedNodeId && (
+          <div
+            style={{
+              position: 'absolute',
+              top: '20px',
+              left: '20px',
+              background: 'var(--surface)',
+              border: '1px solid var(--border)',
+              borderRadius: '8px',
+              padding: '12px 16px',
+              boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
+              fontSize: '12.5px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px',
+            }}
+          >
+            <div>
+              <span style={{ color: 'var(--muted)', fontSize: '11px', display: 'block' }}>Selected Node</span>
+              <strong style={{ color: 'var(--fg)', fontSize: '13.5px' }}>
+                {notes.find(n => n._id === selectedNodeId)?.title || 'Note'}
+              </strong>
             </div>
             <button
-              onClick={() => navigate(`/notes/${selectedNode.id}`)}
+              onClick={() => navigate(`/notes/${selectedNodeId}`)}
               style={{
-                width: '100%', fontSize: '12px', padding: '7px 12px',
-                background: '#1e2a3a', border: '1px solid #2a3a50',
-                borderRadius: '6px', color: '#c9a96e', cursor: 'pointer',
-                fontFamily: 'var(--font-body)', transition: 'background 0.15s',
+                background: '#e05438',
+                color: '#ffffff',
+                border: 'none',
+                borderRadius: '4px',
+                padding: '4px 10px',
+                fontSize: '12px',
+                cursor: 'pointer',
               }}
-              onMouseEnter={e => (e.currentTarget.style.background = '#243040')}
-              onMouseLeave={e => (e.currentTarget.style.background = '#1e2a3a')}
             >
-              Open Page →
+              Open Page
             </button>
           </div>
         )}
 
-        {/* Empty state */}
-        {notes.length === 0 && (
-          <div style={{
-            position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
-            alignItems: 'center', justifyContent: 'center', color: '#3a4256', pointerEvents: 'none',
-          }}>
-            <div style={{ fontSize: '48px', marginBottom: '12px', opacity: 0.4 }}>🕸️</div>
-            <div style={{ fontSize: '14px' }}>Create pages and link them with [[Page Name]] to build your graph</div>
+        {/* Bottom-Left Legend */}
+        {nodeCount > 0 && (
+          <div
+            style={{
+              position: 'absolute',
+              bottom: '24px',
+              left: '24px',
+              background: 'var(--surface)',
+              border: '1px solid var(--border)',
+              borderRadius: '8px',
+              padding: '10px 14px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '6px',
+              fontSize: '12px',
+              color: 'var(--fg)',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ width: 8, height: 8, borderRadius: '2px', background: '#e05438' }} />
+              <span>Vault Page</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ width: 14, height: 2, background: '#e05438' }} />
+              <span>Wiki-link [[...]]</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ width: 14, height: 2, background: '#3b82f6', borderTop: '1px dashed #3b82f6' }} />
+              <span>Sub-page Hierarchy</span>
+            </div>
           </div>
         )}
-      </div>
 
-      <div style={{ marginTop: '10px', display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--muted)', fontSize: '12px' }}>
-        <Info size={11} />
-        Use [[Page Name]] in your editor to create wiki-links. Sub-pages connect via hierarchy lines.
+        {/* Bottom-Right Zoom & Fit Controls */}
+        <div
+          style={{
+            position: 'absolute',
+            bottom: '24px',
+            right: '24px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '4px',
+            background: 'var(--surface)',
+            border: '1px solid var(--border)',
+            borderRadius: '8px',
+            padding: '4px',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+          }}
+        >
+          <button
+            onClick={() => cyRef.current?.zoom(cyRef.current.zoom() * 1.25)}
+            title="Zoom in"
+            style={graphControlBtn}
+          >
+            <ZoomIn size={15} />
+          </button>
+          <button
+            onClick={() => cyRef.current?.zoom(cyRef.current.zoom() * 0.8)}
+            title="Zoom out"
+            style={graphControlBtn}
+          >
+            <ZoomOut size={15} />
+          </button>
+          <button
+            onClick={() => cyRef.current?.fit(undefined, 60)}
+            title="Fit to view"
+            style={graphControlBtn}
+          >
+            <RotateCcw size={15} />
+          </button>
+          <button
+            onClick={() => cyRef.current?.center()}
+            title="Center view"
+            style={graphControlBtn}
+          >
+            <Maximize2 size={15} />
+          </button>
+        </div>
       </div>
     </div>
   );
 }
+
+const graphControlBtn: React.CSSProperties = {
+  background: 'transparent',
+  border: 'none',
+  color: 'var(--muted)',
+  cursor: 'pointer',
+  padding: '6px',
+  borderRadius: '4px',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+};

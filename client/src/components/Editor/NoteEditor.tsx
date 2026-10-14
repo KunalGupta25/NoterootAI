@@ -13,6 +13,7 @@ import type { MentionItem } from './extensions/MentionList';
 import tippy from 'tippy.js';
 import TaskList from '@tiptap/extension-task-list';
 import TaskItem from '@tiptap/extension-task-item';
+import Underline from '@tiptap/extension-underline';
 import MathExtension from '@tiptap/extension-mathematics';
 import Image from '@tiptap/extension-image';
 import Link from '@tiptap/extension-link';
@@ -348,7 +349,15 @@ function createSuggestionRenderer() {
 }
 
 // ─── Main Editor Component ───
-export default function NoteEditor({ initialContent, onChange }: { initialContent?: string; onChange?: (c: string) => void }) {
+export default function NoteEditor({
+  initialContent,
+  onChange,
+  onEditorReady,
+}: {
+  initialContent?: string;
+  onChange?: (c: string) => void;
+  onEditorReady?: (editor: any) => void;
+}) {
   const { notes } = useNoteStore();
   const editor = useEditor({
     extensions: [
@@ -364,6 +373,7 @@ export default function NoteEditor({ initialContent, onChange }: { initialConten
       Placeholder.configure({ placeholder: 'Type / for commands, @ to mention a page...' }),
       TaskList,
       TaskItem.configure({ nested: true }),
+      Underline,
       MathExtension,
       Image,
       Link.configure({ openOnClick: false, HTMLAttributes: { target: '_blank', rel: 'noopener noreferrer' } }),
@@ -485,10 +495,16 @@ export default function NoteEditor({ initialContent, onChange }: { initialConten
     return () => document.removeEventListener('keydown', handleSave);
   }, []);
 
+  useEffect(() => {
+    if (editor && onEditorReady) {
+      onEditorReady(editor);
+    }
+  }, [editor, onEditorReady]);
+
   if (!editor) return null;
 
   return (
-    <div className="prose prose-sm max-w-none prose-wrapper">
+    <div className="prose prose-sm max-w-none prose-wrapper" style={{ position: 'relative' }}>
       <BlockMenu editor={editor} />
       <SelectionToolbar editor={editor} />
       <TableToolbar editor={editor} />

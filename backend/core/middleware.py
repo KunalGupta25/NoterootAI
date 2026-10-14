@@ -15,9 +15,9 @@ def install_middleware(app: FastAPI) -> None:
         started_at = time.perf_counter()
         try:
             response = await call_next(request)
-        except Exception:
+        except Exception as e:
             logger.exception("Unhandled API error", extra={"request_id": request_id, "path": request.url.path})
-            response = JSONResponse(status_code=500, content={"error": "Internal server error"})
+            response = JSONResponse(status_code=500, content={"error": "Internal server error", "details": str(e)})
         response.headers["X-Request-Id"] = request_id
         logger.info(
             "%s %s %s %.3fs",

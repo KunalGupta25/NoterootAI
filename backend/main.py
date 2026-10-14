@@ -21,6 +21,7 @@ from routers.plugins import router as plugins_router
 settings = get_settings()
 
 
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     for name, connect in (("MongoDB", mongo.connect), ("Neo4j", neo4j.connect)):

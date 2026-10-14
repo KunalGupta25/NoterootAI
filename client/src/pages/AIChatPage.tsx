@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useChatStore } from '../stores/chatStore';
-import { isBuiltinProvider } from '../lib/providerConfig';
+import { isBuiltinProvider, BUILTIN_PROVIDERS, type BuiltinProvider } from '../lib/providerConfig';
 import { AI_URL } from '../lib/constants';
 import {
   Sparkles, Send, Search,
@@ -46,6 +46,23 @@ export default function AIChatPage() {
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading]);
+
+  // If current activeProvider has no key, but another provider has a key (e.g. openrouter), auto-switch to it
+  useEffect(() => {
+    const isConfigured = settingsStore.isActiveProviderConfigured();
+    if (!isConfigured) {
+      const withKey = (Object.keys(BUILTIN_PROVIDERS) as BuiltinProvider[])
+        .find((p: BuiltinProvider) => (settingsStore.providerKeys[p] ?? '').trim().length > 0);
+      if (withKey) {
+        settingsStore.setActiveProvider(withKey);
+        return;
+      }
+      const customWithKey = settingsStore.customProviders.find(c => (c.apiKey && c.apiKey.trim().length > 0) || c.baseUrl);
+      if (customWithKey) {
+        settingsStore.setActiveProvider(customWithKey.id);
+      }
+    }
+  }, [settingsStore.activeProvider, settingsStore.providerKeys, settingsStore.customProviders]);
 
   const getApiInfo = useCallback(() => {
     const { providerKeys, customProviders } = useSettingsStore.getState();

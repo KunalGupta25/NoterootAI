@@ -10,14 +10,14 @@ import {
   Folder, ChevronDown, CheckSquare, Maximize2, Minimize2
 } from 'lucide-react';
 import { useSettingsStore } from '../stores/settingsStore';
-import { isBuiltinProvider } from '../lib/providerConfig';
+import { isBuiltinProvider, BUILTIN_PROVIDERS, type BuiltinProvider } from '../lib/providerConfig';
 import { AI_URL } from '../lib/constants';
 import { NotePageActionsBar } from '../plugins/slots/NotePageActionsBar';
 
 export default function NoteEditorPage() {
   const { id } = useParams();
   const { saveNote, getNote, notes } = useNoteStore();
-  const { activeProvider, providerKeys, customProviders, getProviderModel } = useSettingsStore();
+  const { activeProvider, setActiveProvider, providerKeys, customProviders, getProviderModel } = useSettingsStore();
 
   const [title, setTitle] = useState('Untitled');
   const [content, setContent] = useState('');
@@ -255,17 +255,26 @@ export default function NoteEditorPage() {
     try {
       const apiKey = providerKeys[activeProvider as keyof typeof providerKeys] || '';
       const custom = customProviders.find(c => c.id === activeProvider);
-      const effectiveKey = apiKey || custom?.apiKey || '';
+      let providerToUse = activeProvider;
+      let effectiveKey = apiKey || custom?.apiKey || '';
 
-      if (!effectiveKey && activeProvider !== 'openrouter' && !custom?.baseUrl) {
-        setAiChatMessages(prev => [
-          ...prev,
-          {
-            role: 'assistant',
-            text: `⚠️ No API key set for "${activeProvider}". Please go to Settings → AI & Models to configure your key and ensure "${activeProvider}" is set as the active engine.`,
-          },
-        ]);
-        return;
+      if (!effectiveKey && !custom?.baseUrl) {
+        const altBuiltin = (Object.keys(BUILTIN_PROVIDERS) as BuiltinProvider[])
+          .find((p: BuiltinProvider) => (providerKeys[p] ?? '').trim().length > 0);
+        if (altBuiltin) {
+          providerToUse = altBuiltin;
+          effectiveKey = providerKeys[altBuiltin]!;
+          setActiveProvider(altBuiltin);
+        } else {
+          setAiChatMessages(prev => [
+            ...prev,
+            {
+              role: 'assistant',
+              text: `⚠️ No API key set for "${activeProvider}". Please go to Settings → AI & Models to configure your key and ensure your provider is set as the active engine.`,
+            },
+          ]);
+          return;
+        }
       }
 
       const res = await fetch(`${AI_URL}/chat`, {
@@ -279,8 +288,8 @@ export default function NoteEditorPage() {
             },
             { role: 'user', content: textToProcess },
           ],
-          provider: isBuiltinProvider(activeProvider) ? activeProvider : 'custom',
-          model: getProviderModel(activeProvider),
+          provider: isBuiltinProvider(providerToUse) ? providerToUse : 'custom',
+          model: getProviderModel(providerToUse),
           api_key: effectiveKey,
           custom_base_url: custom?.baseUrl,
         }),

@@ -16,37 +16,56 @@ function CompactProviderBar({
   provider, model,
   onProviderChange, onModelChange,
 }: { provider: string; model: string; onProviderChange: (p: string) => void; onModelChange: (m: string) => void }) {
-  const { providerKeys, customProviders } = useSettingsStore();
+  const { providerKeys, customProviders, fetchedModels } = useSettingsStore();
   const [showProvider, setShowProvider] = useState(false);
   const [showModel, setShowModel] = useState(false);
   const [customInput, setCustomInput] = useState('');
   const [addingCustom, setAddingCustom] = useState(false);
 
-  const configured = (Object.keys(BUILTIN_PROVIDERS) as Array<keyof typeof BUILTIN_PROVIDERS>)
-    .filter((p) => (providerKeys[p] ?? '').length > 0);
-  const allProviders = [...configured, ...customProviders.map((c) => c.id)];
+  const builtinList = Object.keys(BUILTIN_PROVIDERS) as Array<keyof typeof BUILTIN_PROVIDERS>;
+  const allProviders = [...builtinList, ...customProviders.map((c) => c.id)];
+
+  const hasKey = (p: string) => {
+    if (isBuiltinProvider(p)) return !!(providerKeys[p] && providerKeys[p].trim().length > 0);
+    const custom = customProviders.find(c => c.id === p);
+    return !!(custom && ((custom.apiKey && custom.apiKey.trim().length > 0) || custom.baseUrl));
+  };
 
   const label = (p: string) => isBuiltinProvider(p) ? BUILTIN_PROVIDERS[p].label : (customProviders.find((c) => c.id === p)?.name ?? p);
   const icon = (p: string) => isBuiltinProvider(p) ? BUILTIN_PROVIDERS[p].icon : '🔌';
-  const models = (p: string): string[] => isBuiltinProvider(p) ? BUILTIN_PROVIDERS[p].models : (customProviders.find((c) => c.id === p)?.models ?? []);
+  const models = (p: string): string[] => {
+    if (fetchedModels[p]?.length) return fetchedModels[p];
+    if (isBuiltinProvider(p)) return BUILTIN_PROVIDERS[p].models;
+    return customProviders.find((c) => c.id === p)?.models ?? [];
+  };
 
   return (
     <div style={{ display: 'flex', gap: '6px', padding: '8px 12px', borderBottom: '1px solid var(--border)', background: 'var(--bg)', flexShrink: 0, alignItems: 'center' }}>
       {/* Provider pill */}
       <div style={{ position: 'relative' }}>
         <button onClick={() => { setShowProvider(!showProvider); setShowModel(false); }}
-          style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '3px 8px', border: '1px solid var(--border)', borderRadius: '12px', background: 'var(--surface)', cursor: 'pointer', fontSize: '11px', color: 'var(--fg)' }}>
-          <span style={{ fontSize: '12px' }}>{icon(provider)}</span> {label(provider)} <ChevronDown size={9} />
+          style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '3px 8px', border: '1px solid var(--border)', borderRadius: '12px', background: 'var(--surface)', cursor: 'pointer', fontSize: '11px', color: 'var(--fg)' }}>
+          <span style={{ fontSize: '12px' }}>{icon(provider)}</span>
+          <span>{label(provider)}</span>
+          <span style={{ fontSize: '9px', color: hasKey(provider) ? '#22c55e' : 'var(--muted)' }}>●</span>
+          <ChevronDown size={9} />
         </button>
         {showProvider && (
-          <div style={{ position: 'absolute', top: '110%', left: 0, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '8px', minWidth: '150px', zIndex: 200, boxShadow: '0 8px 24px rgba(0,0,0,0.2)' }}>
-            {allProviders.map((p) => (
-              <button key={p} onClick={() => { onProviderChange(p); setShowProvider(false); }}
-                style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 10px', background: p === provider ? 'var(--bg)' : 'transparent', border: 'none', cursor: 'pointer', fontSize: '12px', color: 'var(--fg)', textAlign: 'left' }}>
-                <span>{icon(p)}</span> {label(p)}
-                {p === provider && <Check size={10} style={{ marginLeft: 'auto', color: 'var(--accent)' }} />}
-              </button>
-            ))}
+          <div style={{ position: 'absolute', top: '110%', left: 0, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '8px', minWidth: '180px', zIndex: 200, boxShadow: '0 8px 24px rgba(0,0,0,0.2)' }}>
+            {allProviders.map((p) => {
+              const configured = hasKey(p);
+              return (
+                <button key={p} onClick={() => { onProviderChange(p); setShowProvider(false); }}
+                  style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 10px', background: p === provider ? 'var(--bg)' : 'transparent', border: 'none', cursor: 'pointer', fontSize: '12px', color: 'var(--fg)', textAlign: 'left' }}>
+                  <span>{icon(p)}</span>
+                  <span style={{ flex: 1 }}>{label(p)}</span>
+                  <span style={{ fontSize: '9px', color: configured ? '#22c55e' : 'var(--muted)' }} title={configured ? 'Key configured' : 'No key'}>
+                    {configured ? '●' : '○'}
+                  </span>
+                  {p === provider && <Check size={10} style={{ marginLeft: '4px', color: 'var(--accent)' }} />}
+                </button>
+              );
+            })}
           </div>
         )}
       </div>
@@ -92,18 +111,37 @@ export default function AISidebar({ setAiOpen }: { setAiOpen: (open: boolean) =>
   const settings = useSettingsStore();
   const location = useLocation();
   const navigate = useNavigate();
-
   const [currentNoteId, setCurrentNoteId] = useState<string | null>(null);
 
-  // Provider/model for chat (local — doesn't affect global active)
-  const [chatProvider, setChatProvider] = useState(settings.activeProvider);
-  const [chatModel, setChatModel] = useState(settings.getProviderModel(settings.activeProvider));
+  // Provider/model for chat with auto-fallback to configured providers (e.g. openrouter)
+  const hasKeyFor = useCallback((p: string) => {
+    const s = useSettingsStore.getState();
+    if (isBuiltinProvider(p)) return !!(s.providerKeys[p] && s.providerKeys[p].trim().length > 0);
+    const custom = s.customProviders.find(c => c.id === p);
+    return !!(custom && ((custom.apiKey && custom.apiKey.trim().length > 0) || custom.baseUrl));
+  }, []);
 
-  // Sync with global active provider if it changes (e.g. user just configured it in settings)
+  const resolveEffectiveProvider = useCallback(() => {
+    const s = useSettingsStore.getState();
+    if (hasKeyFor(s.activeProvider)) return s.activeProvider;
+    const withKey = (Object.keys(BUILTIN_PROVIDERS) as Array<keyof typeof BUILTIN_PROVIDERS>)
+      .find(p => (s.providerKeys[p] ?? '').trim().length > 0);
+    if (withKey) return withKey;
+    const customWithKey = s.customProviders.find(c => (c.apiKey && c.apiKey.trim().length > 0) || c.baseUrl);
+    if (customWithKey) return customWithKey.id;
+    return s.activeProvider;
+  }, [hasKeyFor]);
+
+  const initialProvider = resolveEffectiveProvider();
+  const [chatProvider, setChatProvider] = useState(initialProvider);
+  const [chatModel, setChatModel] = useState(settings.getProviderModel(initialProvider));
+
+  // Sync with global active provider or keys change
   useEffect(() => {
-    setChatProvider(settings.activeProvider);
-    setChatModel(settings.getProviderModel(settings.activeProvider));
-  }, [settings.activeProvider, settings.getProviderModel]);
+    const effective = resolveEffectiveProvider();
+    setChatProvider(effective);
+    setChatModel(settings.getProviderModel(effective));
+  }, [settings.activeProvider, settings.providerKeys, resolveEffectiveProvider, settings.getProviderModel]);
 
   // Suggest state + cache (per note_id so switching tabs doesn't re-fetch)
   const suggestCache = useRef<Record<string, { related: SuggestResult[]; links: string[] }>>({});
@@ -270,7 +308,7 @@ export default function AISidebar({ setAiOpen }: { setAiOpen: (open: boolean) =>
       </div>
 
       {/* Provider bar (Chat tab only) */}
-      {activeTab === 'Chat' && isConfigured && (
+      {activeTab === 'Chat' && (
         <CompactProviderBar
           provider={chatProvider} model={chatModel}
           onProviderChange={(p) => { setChatProvider(p); useSettingsStore.getState().setActiveProvider(p); setChatModel(useSettingsStore.getState().getProviderModel(p)); }}
@@ -374,8 +412,28 @@ export default function AISidebar({ setAiOpen }: { setAiOpen: (open: boolean) =>
         {activeTab === 'Chat' && (
           <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
             {!isConfigured ? (
-              <div style={{ padding: '32px 16px', fontSize: '13px', color: 'var(--muted)', textAlign: 'center' }}>
-                Configure an AI Provider in Settings to start chatting.
+              <div style={{ padding: '36px 18px', fontSize: '13px', color: 'var(--muted)', textAlign: 'center' }}>
+                <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--fg)', marginBottom: '6px' }}>
+                  No API key configured for {isBuiltinProvider(chatProvider) ? BUILTIN_PROVIDERS[chatProvider].label : chatProvider}
+                </div>
+                <div style={{ fontSize: '12px', marginBottom: '16px', lineHeight: 1.5 }}>
+                  Select a configured provider from the dropdown above (e.g. OpenRouter) or add your API key in Settings.
+                </div>
+                <button
+                  onClick={() => navigate('/settings')}
+                  style={{
+                    background: 'var(--surface)',
+                    border: '1px solid var(--border)',
+                    color: 'var(--accent)',
+                    padding: '7px 14px',
+                    borderRadius: '6px',
+                    fontSize: '12px',
+                    fontWeight: 500,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Configure in Settings →
+                </button>
               </div>
             ) : (
               <>

@@ -18,8 +18,10 @@ class Provider:
             raise ValueError(f"{name} API key not provided")
         self.base_url = base_url
         self.default_model = getattr(settings, f"default_chat_model_{name}", settings.default_chat_model_openai)
-        self.embedding_model = settings.default_embedding_model
-        self.client = openai.AsyncOpenAI(api_key=self.api_key, base_url=base_url)
+        headers = {}
+        if self.name == "openrouter":
+            headers = {"HTTP-Referer": "https://noterootai.app", "X-Title": "NoteRootAI"}
+        self.client = openai.AsyncOpenAI(api_key=self.api_key, base_url=base_url, default_headers=headers if headers else None)
 
     def collection_name(self) -> str:
         if self.name == "custom" and self.base_url:

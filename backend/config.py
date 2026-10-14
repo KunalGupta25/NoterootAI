@@ -24,10 +24,12 @@ class Settings(BaseSettings):
     default_chat_model_gemini: str = "gemini-1.5-flash"
     default_chat_model_mistral: str = "mistral-small-latest"
     default_chat_model_groq: str = "llama-3.3-70b-versatile"
+    default_chat_model_openrouter: str = "deepseek/deepseek-r1"
     openai_api_key: str = ""
     gemini_api_key: str = ""
     mistral_api_key: str = ""
     groq_api_key: str = ""
+    openrouter_api_key: str = ""
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

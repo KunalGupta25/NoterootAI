@@ -8,7 +8,7 @@ const wikiLinkRegex = /\[\[(.*?)\]\]/g;
 
 export const createNote = async (req: AuthRequest, res: Response) => {
   try {
-    const { _id, title, content, tags, parentId, icon, properties } = req.body;
+    const { _id, title, content, tags, parentId, space, icon, properties } = req.body;
     const note = new Note({
       _id,
       userId: req.userId,
@@ -16,6 +16,7 @@ export const createNote = async (req: AuthRequest, res: Response) => {
       content,
       tags,
       parentId,
+      space: space || 'Other',
       icon,
       properties,
     });
@@ -61,7 +62,7 @@ export const getNoteById = async (req: AuthRequest, res: Response) => {
 
 export const updateNote = async (req: AuthRequest, res: Response) => {
   try {
-    const { title, content, tags, parentId, icon, properties } = req.body;
+    const { title, content, tags, parentId, space, icon, properties } = req.body;
     
     let note = await Note.findById(req.params.id);
 
@@ -71,7 +72,7 @@ export const updateNote = async (req: AuthRequest, res: Response) => {
       }
       note = await Note.findByIdAndUpdate(
         req.params.id,
-        { userId: req.userId, title, content, tags, parentId, icon, properties },
+        { userId: req.userId, title, content, tags, parentId, space: space || note.space || 'Other', icon, properties },
         { new: true }
       );
     } else {
@@ -82,6 +83,7 @@ export const updateNote = async (req: AuthRequest, res: Response) => {
         content,
         tags,
         parentId,
+        space: space || 'Other',
         icon,
         properties
       });

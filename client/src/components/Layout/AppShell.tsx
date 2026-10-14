@@ -2,7 +2,8 @@ import { Link, useLocation, Outlet } from 'react-router-dom';
 import {
   Home, Search, FileText, Network, Bot,
   Puzzle, Settings, Sun, Moon,
-  PanelLeftClose, PanelLeft, HelpCircle, Plus
+  PanelLeftClose, PanelLeft, HelpCircle, Plus,
+  Folder, FolderPlus, ChevronRight, ChevronDown
 } from 'lucide-react';
 import { useNoteStore } from '../../stores/noteStore';
 import { useAuthStore } from '../../stores/authStore';
@@ -28,8 +29,86 @@ export default function AppShell() {
     return Array.from(tagSet).sort();
   }, [notes]);
 
+  // Group all notes by space
+  const spacesData = useMemo(() => {
+    const map = new Map<string, typeof notes>();
+    notes.forEach(note => {
+      const spaceName = note.space || note.properties?.space || 'Other';
+      const list = map.get(spaceName) || [];
+      list.push(note);
+      map.set(spaceName, list);
+    });
+
+    if (!map.has('Other')) {
+      map.set('Other', []);
+    }
+
+    return Array.from(map.entries()).sort(([a], [b]) => {
+      if (a === 'Other') return 1;
+      if (b === 'Other') return -1;
+      return a.localeCompare(b);
+    });
+  }, [notes]);
+
+  const [expandedSpaces, setExpandedSpaces] = useState<Record<string, boolean>>(() => {
+    try {
+      return JSON.parse(localStorage.getItem('noteroot_expanded_spaces') || '{"Other":true}');
+    } catch {
+      return { Other: true };
+    }
+  });
+
+  const toggleSpaceExpand = (spaceName: string) => {
+    setExpandedSpaces(prev => {
+      const next = { ...prev, [spaceName]: !prev[spaceName] };
+      localStorage.setItem('noteroot_expanded_spaces', JSON.stringify(next));
+      return next;
+    });
+  };
+
+  const [showNewSpaceInput, setShowNewSpaceInput] = useState(false);
+  const [newSpaceName, setNewSpaceName] = useState('');
+
+  const handleCreateSpace = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const trimmed = newSpaceName.trim();
+    if (!trimmed) {
+      setShowNewSpaceInput(false);
+      return;
+    }
+    const id = await saveNote({
+      title: `${trimmed} Home`,
+      space: trimmed,
+      content: `<p>Welcome to <strong>${trimmed}</strong> space.</p>`,
+      icon: '📁',
+      parentId: null,
+      tags: [],
+    });
+    setNewSpaceName('');
+    setShowNewSpaceInput(false);
+    setExpandedSpaces(p => ({ ...p, [trimmed]: true }));
+    navigate(`/notes/${id}`);
+  };
+
+  const handleCreateNoteInSpace = async (e: React.MouseEvent, spaceName: string) => {
+    e.stopPropagation();
+    e.preventDefault();
+    const id = await saveNote({
+      title: 'Untitled Note',
+      space: spaceName,
+      content: '',
+      icon: '📄',
+      parentId: null,
+      tags: [],
+    });
+    setExpandedSpaces(p => ({ ...p, [spaceName]: true }));
+    navigate(`/notes/${id}`);
+  };
+
   const handleNewNote = async () => {
-    const id = await saveNote({ title: 'Untitled', content: '', icon: '📄', parentId: null, tags: [] });
+    const searchParams = new URLSearchParams(location.search);
+    const activeSpace = searchParams.get('space') || 'Other';
+    const id = await saveNote({ title: 'Untitled', content: '', icon: '📄', parentId: null, space: activeSpace, tags: [] });
     navigate(`/notes/${id}`);
   };
 
@@ -259,6 +338,218 @@ export default function AppShell() {
               </Link>
             );
           })}
+
+          {/* Spaces Section — Groups notes by space (expanded only) */}
+          {!sidebarCollapsed && (
+            <div style={{ marginTop: '14px', paddingTop: '4px' }}>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '4px 10px',
+                  marginBottom: '2px',
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: '11px',
+                    fontWeight: 600,
+                    color: 'var(--muted)',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.05em',
+                  }}
+                >
+                  Spaces
+                </span>
+                <button
+                  onClick={() => setShowNewSpaceInput(prev => !prev)}
+                  title="Create new space"
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: 'var(--muted)',
+                    cursor: 'pointer',
+                    padding: '2px 4px',
+                    borderRadius: '4px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                  onMouseEnter={e => (e.currentTarget.style.color = '#e05438')}
+                  onMouseLeave={e => (e.currentTarget.style.color = 'var(--muted)')}
+                >
+                  <FolderPlus size={14} />
+                </button>
+              </div>
+
+              {/* New Space Input Box */}
+              {showNewSpaceInput && (
+                <form
+                  onSubmit={handleCreateSpace}
+                  style={{ padding: '4px 8px 8px' }}
+                >
+                  <input
+                    type="text"
+                    value={newSpaceName}
+                    onChange={e => setNewSpaceName(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Escape') setShowNewSpaceInput(false);
+                    }}
+                    placeholder="New space name..."
+                    autoFocus
+                    style={{
+                      width: '100%',
+                      padding: '5px 8px',
+                      borderRadius: '5px',
+                      background: 'var(--surface-2)',
+                      border: '1px solid var(--border)',
+                      color: 'var(--fg)',
+                      fontSize: '12px',
+                      outline: 'none',
+                      boxSizing: 'border-box',
+                    }}
+                  />
+                </form>
+              )}
+
+              {/* Spaces List */}
+              {spacesData.map(([spaceName, spaceNotes]) => {
+                const isExpanded = !!expandedSpaces[spaceName];
+                const isCurrentSpace = location.pathname.startsWith('/notes') && location.search.includes(`space=${encodeURIComponent(spaceName)}`);
+
+                return (
+                  <div key={spaceName} style={{ marginBottom: '2px' }}>
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '4px 8px',
+                        borderRadius: '6px',
+                        background: isCurrentSpace ? 'rgba(224, 84, 56, 0.1)' : 'transparent',
+                        color: isCurrentSpace ? '#e05438' : 'var(--fg)',
+                        cursor: 'pointer',
+                        fontSize: '13px',
+                        fontWeight: 500,
+                        transition: 'background 0.12s',
+                      }}
+                      onMouseEnter={e => {
+                        if (!isCurrentSpace) e.currentTarget.style.background = 'var(--surface-2)';
+                      }}
+                      onMouseLeave={e => {
+                        if (!isCurrentSpace) e.currentTarget.style.background = 'transparent';
+                      }}
+                    >
+                      <div
+                        onClick={() => toggleSpaceExpand(spaceName)}
+                        style={{ display: 'flex', alignItems: 'center', gap: '6px', flex: 1, minWidth: 0 }}
+                      >
+                        <span style={{ color: 'var(--muted)', display: 'flex', alignItems: 'center' }}>
+                          {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                        </span>
+                        <Folder size={14} style={{ color: spaceName === 'Other' ? 'var(--muted)' : '#e05438', flexShrink: 0 }} />
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {spaceName}
+                        </span>
+                        <span style={{ fontSize: '11px', color: 'var(--muted)', marginLeft: '2px' }}>
+                          ({spaceNotes.length})
+                        </span>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
+                        <Link
+                          to={`/notes?space=${encodeURIComponent(spaceName)}`}
+                          title={`View all notes in ${spaceName}`}
+                          style={{
+                            color: 'var(--muted)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            textDecoration: 'none',
+                            padding: '2px',
+                          }}
+                          onMouseEnter={e => (e.currentTarget.style.color = '#e05438')}
+                          onMouseLeave={e => (e.currentTarget.style.color = 'var(--muted)')}
+                        >
+                          <FileText size={12} />
+                        </Link>
+                        <button
+                          onClick={e => handleCreateNoteInSpace(e, spaceName)}
+                          title={`Create note in ${spaceName}`}
+                          style={{
+                            background: 'transparent',
+                            border: 'none',
+                            color: 'var(--muted)',
+                            cursor: 'pointer',
+                            padding: '2px',
+                            display: 'flex',
+                            borderRadius: '3px',
+                          }}
+                          onMouseEnter={e => (e.currentTarget.style.color = '#e05438')}
+                          onMouseLeave={e => (e.currentTarget.style.color = 'var(--muted)')}
+                        >
+                          <Plus size={13} />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Nested Notes within this Space */}
+                    {isExpanded && (
+                      <div style={{ paddingLeft: '18px', display: 'flex', flexDirection: 'column', gap: '1px', marginTop: '1px' }}>
+                        {spaceNotes.length === 0 ? (
+                          <div style={{ padding: '3px 8px', fontSize: '11.5px', color: 'var(--muted)', fontStyle: 'italic' }}>
+                            Empty space
+                          </div>
+                        ) : (
+                          spaceNotes.map(n => {
+                            const isNoteActive = location.pathname === `/notes/${n._id}`;
+                            return (
+                              <Link
+                                key={n._id}
+                                to={`/notes/${n._id}`}
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '6px',
+                                  padding: '4px 8px',
+                                  borderRadius: '5px',
+                                  fontSize: '12.5px',
+                                  color: isNoteActive ? '#e05438' : 'var(--muted)',
+                                  background: isNoteActive ? 'rgba(224, 84, 56, 0.08)' : 'transparent',
+                                  textDecoration: 'none',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  whiteSpace: 'nowrap',
+                                  transition: 'background 0.12s, color 0.12s',
+                                }}
+                                onMouseEnter={e => {
+                                  if (!isNoteActive) {
+                                    e.currentTarget.style.color = 'var(--fg)';
+                                    e.currentTarget.style.background = 'var(--surface-2)';
+                                  }
+                                }}
+                                onMouseLeave={e => {
+                                  if (!isNoteActive) {
+                                    e.currentTarget.style.color = 'var(--muted)';
+                                    e.currentTarget.style.background = 'transparent';
+                                  }
+                                }}
+                              >
+                                <span style={{ fontSize: '12px', flexShrink: 0 }}>{n.icon || '📄'}</span>
+                                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                  {n.title || 'Untitled'}
+                                </span>
+                              </Link>
+                            );
+                          })
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
 
           {/* Tags Section — derived from real notes (expanded only) */}
           {!sidebarCollapsed && (

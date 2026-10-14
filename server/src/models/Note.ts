@@ -7,6 +7,7 @@ export interface INote extends Document {
   content: string;
   tags: string[];
   parentId: string | null;
+  space?: string;
   icon: string;
   properties: Record<string, string>;
   backlinks: string[];
@@ -22,6 +23,7 @@ const NoteSchema: Schema = new Schema(
     content: { type: String, default: '' },
     tags: [{ type: String }],
     parentId: { type: String, default: null },
+    space: { type: String, default: 'Other' },
     icon: { type: String, default: '📄' },
     properties: { type: Schema.Types.Mixed, default: {} },
     backlinks: [{ type: String, ref: 'Note' }],

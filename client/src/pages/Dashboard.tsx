@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useNoteStore } from '../stores/noteStore';
 import { useAuthStore } from '../stores/authStore';
-import { Plus, MoreVertical, Star, Trash2, Edit3, FileText, BookOpen, Search, X, Tag } from 'lucide-react';
+import { Plus, MoreVertical, Star, Trash2, Edit3, FileText, BookOpen, Search, X, Tag, Folder, FolderInput, Check } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { TUTORIAL_NOTE_CONTENT } from '../components/Onboarding/OnboardingModal';
 
@@ -12,10 +12,13 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const tagParam = searchParams.get('tag');
+  const spaceParam = searchParams.get('space');
 
   const [activeTab, setActiveTab] = useState<'Recent' | 'Starred' | 'All'>('Recent');
   const [searchQuery, setSearchQuery] = useState('');
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
+  const [moveModalNote, setMoveModalNote] = useState<{ id: string; title: string; currentSpace: string } | null>(null);
+  const [newSpaceInput, setNewSpaceInput] = useState('');
 
   const [starredIds, setStarredIds] = useState<string[]>(() => {
     try {
@@ -67,6 +70,7 @@ export default function Dashboard() {
       parentId: null,
       icon: '📄',
       tags: tagParam ? [tagParam] : [],
+      space: spaceParam || 'Other',
     });
     navigate(`/notes/${id}`);
   };
@@ -78,8 +82,28 @@ export default function Dashboard() {
       icon: '📚',
       parentId: null,
       tags: ['Tutorial', 'Getting Started'],
+      space: spaceParam || 'Other',
     });
     navigate(`/notes/${id}`);
+  };
+
+  const availableSpaces = useMemo(() => {
+    const set = new Set<string>(['Other']);
+    notes.forEach(n => {
+      if (n.space) set.add(n.space);
+    });
+    return Array.from(set).sort();
+  }, [notes]);
+
+  const handleMigrateNote = async (noteId: string, targetSpace: string) => {
+    const clean = targetSpace.trim();
+    if (!clean) return;
+    await saveNote({
+      _id: noteId,
+      space: clean,
+    });
+    setMoveModalNote(null);
+    setNewSpaceInput('');
   };
 
   // Convert real store notes into display items
@@ -95,7 +119,7 @@ export default function Dashboard() {
 
     return notes.map((n, idx) => {
       const color = colors[idx % colors.length];
-      const space = n.tags && n.tags.length > 0 ? `Spaces / ${n.tags[0]}` : 'Personal';
+      const space = n.space || 'Other';
       const isStarred = starredIds.includes(n._id);
 
       let editedTime = 'Just now';
@@ -116,6 +140,7 @@ export default function Dashboard() {
         iconColor: color.fg,
         editedTime,
         spacePath: space,
+        spaceRaw: space,
         isStarred,
       };
     });
@@ -129,13 +154,19 @@ export default function Dashboard() {
       list = list.filter(n => n.tags.includes(tagParam));
     }
 
+    // Filter by space if specified in query
+    if (spaceParam) {
+      list = list.filter(n => n.spaceRaw === spaceParam);
+    }
+
     // Filter by search query
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim();
       list = list.filter(n =>
         n.title.toLowerCase().includes(q) ||
         n.content.toLowerCase().includes(q) ||
-        n.tags.some(t => t.toLowerCase().includes(q))
+        n.tags.some(t => t.toLowerCase().includes(q)) ||
+        n.spaceRaw.toLowerCase().includes(q)
       );
     }
 
@@ -143,7 +174,7 @@ export default function Dashboard() {
       return list.filter(n => n.isStarred);
     }
     return list;
-  }, [displayList, activeTab, tagParam, searchQuery]);
+  }, [displayList, activeTab, tagParam, spaceParam, searchQuery]);
 
   return (
     <div
@@ -227,6 +258,7 @@ export default function Dashboard() {
             fontSize: '12.5px',
             fontWeight: 500,
             marginBottom: '16px',
+            marginRight: '8px',
           }}
         >
           <Tag size={13} />
@@ -237,6 +269,47 @@ export default function Dashboard() {
               setSearchParams(searchParams);
             }}
             title="Clear tag filter"
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: '#e05438',
+              cursor: 'pointer',
+              padding: '2px',
+              display: 'flex',
+              alignItems: 'center',
+              borderRadius: '3px',
+            }}
+          >
+            <X size={13} />
+          </button>
+        </div>
+      )}
+
+      {/* ── Active Space Filter Banner ── */}
+      {spaceParam && (
+        <div
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '6px 12px',
+            borderRadius: '6px',
+            background: 'rgba(224, 84, 56, 0.12)',
+            border: '1px solid rgba(224, 84, 56, 0.25)',
+            color: '#e05438',
+            fontSize: '12.5px',
+            fontWeight: 500,
+            marginBottom: '16px',
+          }}
+        >
+          <Folder size={13} />
+          <span>Filtered by space: <strong>{spaceParam}</strong></span>
+          <button
+            onClick={() => {
+              searchParams.delete('space');
+              setSearchParams(searchParams);
+            }}
+            title="Clear space filter"
             style={{
               background: 'transparent',
               border: 'none',
@@ -615,6 +688,30 @@ export default function Dashboard() {
                     <button
                       onClick={() => {
                         setMenuOpenId(null);
+                        setMoveModalNote({ id: note.id, title: note.title, currentSpace: note.spaceRaw });
+                      }}
+                      style={{
+                        width: '100%',
+                        padding: '7px 10px',
+                        background: 'transparent',
+                        border: 'none',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        fontSize: '12.5px',
+                        color: 'var(--fg)',
+                        cursor: 'pointer',
+                        borderRadius: '4px',
+                        textAlign: 'left',
+                      }}
+                      onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-2)')}
+                      onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                    >
+                      <FolderInput size={14} /> Move to Space...
+                    </button>
+                    <button
+                      onClick={() => {
+                        setMenuOpenId(null);
                         deleteNote(note.id);
                       }}
                       style={{
@@ -641,6 +738,170 @@ export default function Dashboard() {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* ── Move Note to Space Modal ── */}
+      {moveModalNote && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0, 0, 0, 0.45)',
+            backdropFilter: 'blur(2px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            padding: '20px',
+          }}
+          onClick={() => {
+            setMoveModalNote(null);
+            setNewSpaceInput('');
+          }}
+        >
+          <div
+            style={{
+              background: 'var(--surface)',
+              border: '1px solid var(--border)',
+              borderRadius: '12px',
+              width: '100%',
+              maxWidth: '380px',
+              padding: '20px',
+              boxShadow: '0 16px 36px rgba(0,0,0,0.25)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '14px',
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Folder size={18} style={{ color: '#e05438' }} />
+                <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 600, color: 'var(--fg)' }}>
+                  Move to Space
+                </h3>
+              </div>
+              <button
+                onClick={() => {
+                  setMoveModalNote(null);
+                  setNewSpaceInput('');
+                }}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: 'var(--muted)',
+                  cursor: 'pointer',
+                  padding: '4px',
+                  display: 'flex',
+                }}
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div style={{ fontSize: '12.5px', color: 'var(--muted)' }}>
+              Choose a space to categorize <strong style={{ color: 'var(--fg)' }}>"{moveModalNote.title}"</strong>:
+            </div>
+
+            {/* Existing Spaces List */}
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '4px',
+                maxHeight: '180px',
+                overflowY: 'auto',
+                border: '1px solid var(--border)',
+                borderRadius: '8px',
+                padding: '6px',
+                background: 'var(--bg)',
+              }}
+            >
+              {availableSpaces.map(sp => {
+                const isSelected = moveModalNote.currentSpace === sp;
+                return (
+                  <button
+                    key={sp}
+                    onClick={() => handleMigrateNote(moveModalNote.id, sp)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '7px 10px',
+                      borderRadius: '6px',
+                      border: 'none',
+                      background: isSelected ? 'rgba(224, 84, 56, 0.12)' : 'transparent',
+                      color: isSelected ? '#e05438' : 'var(--fg)',
+                      fontSize: '13px',
+                      fontWeight: isSelected ? 600 : 400,
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      transition: 'background 0.12s',
+                    }}
+                    onMouseEnter={e => {
+                      if (!isSelected) e.currentTarget.style.background = 'var(--surface-2)';
+                    }}
+                    onMouseLeave={e => {
+                      if (!isSelected) e.currentTarget.style.background = 'transparent';
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <Folder size={14} style={{ color: isSelected ? '#e05438' : 'var(--muted)' }} />
+                      <span>{sp}</span>
+                    </div>
+                    {isSelected && <Check size={14} style={{ color: '#e05438' }} />}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Create & Move to New Space */}
+            <div style={{ display: 'flex', gap: '6px' }}>
+              <input
+                type="text"
+                placeholder="Or create new space..."
+                value={newSpaceInput}
+                onChange={e => setNewSpaceInput(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && newSpaceInput.trim()) {
+                    handleMigrateNote(moveModalNote.id, newSpaceInput);
+                  }
+                }}
+                style={{
+                  flex: 1,
+                  padding: '7px 10px',
+                  borderRadius: '6px',
+                  border: '1px solid var(--border)',
+                  background: 'var(--bg)',
+                  color: 'var(--fg)',
+                  fontSize: '12.5px',
+                  outline: 'none',
+                }}
+              />
+              <button
+                disabled={!newSpaceInput.trim()}
+                onClick={() => {
+                  if (newSpaceInput.trim()) {
+                    handleMigrateNote(moveModalNote.id, newSpaceInput);
+                  }
+                }}
+                style={{
+                  padding: '7px 12px',
+                  borderRadius: '6px',
+                  border: 'none',
+                  background: newSpaceInput.trim() ? '#e05438' : 'var(--surface-2)',
+                  color: newSpaceInput.trim() ? '#ffffff' : 'var(--muted)',
+                  fontSize: '12.5px',
+                  fontWeight: 500,
+                  cursor: newSpaceInput.trim() ? 'pointer' : 'not-allowed',
+                  transition: 'background 0.12s',
+                }}
+              >
+                Move
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

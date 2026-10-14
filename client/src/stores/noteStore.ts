@@ -12,6 +12,7 @@ export interface Note {
   content: string;
   tags: string[];
   parentId: string | null;
+  space?: string;
   icon: string;
   properties: Record<string, string>;
   updatedAt: number;
@@ -74,11 +75,11 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
       if (key.startsWith(prefix) || isLegacyKey) {
         const note = await localforage.getItem<Note>(key);
         if (note) {
-          // Migrate old notes
           if (note.parentId === undefined) note.parentId = null;
           if (!note.icon) note.icon = '📄';
           if (!note.properties) note.properties = {};
           if (!note.tags) note.tags = [];
+          if (!note.space) note.space = note.properties?.space || (note.tags && note.tags.length > 0 ? note.tags[0] : 'Other');
           if (!note.createdAt) note.createdAt = note.updatedAt;
           loadedNotes.push(note);
           if (isLegacyKey) {
@@ -151,6 +152,10 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
 
     // Read current from localforage for merge (existing note data)
     const currentNote = isNew ? null : await localforage.getItem<Note>(vaultKey(_id));
+    const currentSpace = currentNote?.space || currentNote?.properties?.space;
+    const space = noteData.space !== undefined
+      ? noteData.space
+      : (currentSpace || noteData.properties?.space || 'Other');
 
     const note: Note = {
       _id,
@@ -158,8 +163,13 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
       content: noteData.content ?? currentNote?.content ?? '',
       tags: noteData.tags ?? currentNote?.tags ?? [],
       parentId: noteData.parentId !== undefined ? noteData.parentId : (currentNote?.parentId ?? null),
+      space,
       icon: noteData.icon ?? currentNote?.icon ?? '📄',
-      properties: noteData.properties ?? currentNote?.properties ?? {},
+      properties: {
+        ...(currentNote?.properties || {}),
+        ...(noteData.properties || {}),
+        space,
+      },
       updatedAt: Date.now(),
       createdAt: currentNote?.createdAt ?? Date.now(),
       synced: false,

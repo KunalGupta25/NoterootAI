@@ -1,12 +1,13 @@
 import { useParams, Link } from 'react-router-dom';
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import NoteEditor from '../components/Editor/NoteEditor';
 import { useNoteStore } from '../stores/noteStore';
 import {
   Star, Share2, Info, Sparkles, X, Send, Paperclip,
   Bold, Italic, Underline, Strikethrough, Code,
   Quote, Link as LinkIcon, List, ListOrdered, Table, Image,
-  Wand2, Check, Scissors, Plus, Palette, Globe
+  Wand2, Check, Scissors, Plus, Palette, Globe,
+  Folder, ChevronDown
 } from 'lucide-react';
 import { useSettingsStore } from '../stores/settingsStore';
 import { isBuiltinProvider } from '../lib/providerConfig';
@@ -14,12 +15,13 @@ import { AI_URL } from '../lib/constants';
 
 export default function NoteEditorPage() {
   const { id } = useParams();
-  const { saveNote, getNote } = useNoteStore();
+  const { saveNote, getNote, notes } = useNoteStore();
   const { activeProvider, providerKeys, customProviders, getProviderModel } = useSettingsStore();
 
   const [title, setTitle] = useState('Untitled');
   const [content, setContent] = useState('');
   const [tags, setTags] = useState<string[]>([]);
+  const [space, setSpace] = useState('Other');
   const [isLoaded, setIsLoaded] = useState(false);
   const [isStarred, setIsStarred] = useState(false);
   const [showAiAssistant, setShowAiAssistant] = useState(false);
@@ -29,24 +31,79 @@ export default function NoteEditorPage() {
   const [showInfoModal, setShowInfoModal] = useState(false);
   const infoModalRef = useRef<HTMLDivElement>(null);
 
+  // Space manager state
+  const [showSpaceMenu, setShowSpaceMenu] = useState(false);
+  const [newSpaceInput, setNewSpaceInput] = useState('');
+  const spaceMenuRef = useRef<HTMLDivElement>(null);
+
   // Tag manager state
   const [newTagInput, setNewTagInput] = useState('');
   const [isAddingTag, setIsAddingTag] = useState(false);
 
-  // Close info modal on click outside
+  // AI Assistant resizable panel width (persisted in localStorage)
+  const [aiPanelWidth, setAiPanelWidth] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('noteroot_ai_panel_width');
+      return saved ? Math.max(260, Math.min(700, parseInt(saved, 10))) : 320;
+    } catch {
+      return 320;
+    }
+  });
+
+  const isResizingRef = useRef(false);
+
+  const handleResizeMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    isResizingRef.current = true;
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      if (!isResizingRef.current) return;
+      const newWidth = Math.min(Math.max(window.innerWidth - moveEvent.clientX, 260), 700);
+      setAiPanelWidth(newWidth);
+      try {
+        localStorage.setItem('noteroot_ai_panel_width', String(newWidth));
+      } catch {}
+    };
+
+    const handleMouseUp = () => {
+      isResizingRef.current = false;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+  }, []);
+
+  const availableSpaces = useMemo(() => {
+    const set = new Set<string>(['Other']);
+    notes.forEach(n => {
+      if (n.space) set.add(n.space);
+    });
+    return Array.from(set).sort();
+  }, [notes]);
+
+  // Close menus on outside click
   useEffect(() => {
     const handleOutsideClick = (e: MouseEvent) => {
       if (infoModalRef.current && !infoModalRef.current.contains(e.target as Node)) {
         setShowInfoModal(false);
       }
+      if (spaceMenuRef.current && !spaceMenuRef.current.contains(e.target as Node)) {
+        setShowSpaceMenu(false);
+      }
     };
-    if (showInfoModal) {
+    if (showInfoModal || showSpaceMenu) {
       document.addEventListener('mousedown', handleOutsideClick);
     }
     return () => {
       document.removeEventListener('mousedown', handleOutsideClick);
     };
-  }, [showInfoModal]);
+  }, [showInfoModal, showSpaceMenu]);
 
   // AI Assistant chat state
   const [aiPrompt, setAiPrompt] = useState('');
@@ -60,9 +117,11 @@ export default function NoteEditorPage() {
 
   const titleRef = useRef(title);
   const contentRef = useRef(content);
+  const spaceRef = useRef(space);
 
   useEffect(() => { titleRef.current = title; }, [title]);
   useEffect(() => { contentRef.current = content; }, [content]);
+  useEffect(() => { spaceRef.current = space; }, [space]);
 
   useEffect(() => {
     let active = true;
@@ -73,16 +132,19 @@ export default function NoteEditorPage() {
           setTitle(note.title || 'Untitled');
           setContent(note.content || '');
           setTags(note.tags || []);
+          setSpace(note.space || 'Other');
         } else {
           setTitle('Untitled');
           setContent('');
           setTags([]);
+          setSpace('Other');
         }
         setIsLoaded(true);
       });
     } else {
       setTitle('Untitled');
       setContent('');
+      setSpace('Other');
       setIsLoaded(true);
     }
     return () => {
@@ -90,7 +152,7 @@ export default function NoteEditorPage() {
     };
   }, [id, getNote]);
 
-  const triggerSave = useCallback(async (newTitle?: string, newContent?: string, newTags?: string[]) => {
+  const triggerSave = useCallback(async (newTitle?: string, newContent?: string, newTags?: string[], newSpace?: string) => {
     if (!id || id === 'new') return;
     await saveNote({
       _id: id,
@@ -99,8 +161,19 @@ export default function NoteEditorPage() {
       icon: '📄',
       parentId: null,
       tags: newTags ?? tags,
+      space: newSpace ?? spaceRef.current,
     });
   }, [id, saveNote, tags]);
+
+  const handleMigrateSpace = (targetSpace: string) => {
+    const clean = targetSpace.trim();
+    if (!clean) return;
+    setSpace(clean);
+    spaceRef.current = clean;
+    setShowSpaceMenu(false);
+    setNewSpaceInput('');
+    triggerSave(undefined, undefined, undefined, clean);
+  };
 
   const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const v = e.target.value;
@@ -256,7 +329,7 @@ export default function NoteEditorPage() {
             flexShrink: 0,
           }}
         >
-          {/* Breadcrumb path */}
+          {/* Breadcrumb path & Space Selector */}
           <div
             style={{
               display: 'flex',
@@ -272,7 +345,136 @@ export default function NoteEditorPage() {
             <span>/</span>
             <Link to="/notes" style={{ color: 'inherit', textDecoration: 'none' }}>All Notes</Link>
             <span>/</span>
-            <span style={{ color: 'var(--fg)', fontWeight: 500 }}>{title}</span>
+
+            {/* Space Migration Dropdown */}
+            <div style={{ position: 'relative' }} ref={spaceMenuRef}>
+              <button
+                onClick={() => setShowSpaceMenu(!showSpaceMenu)}
+                title="Migrate or change space"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  background: showSpaceMenu ? 'rgba(224, 84, 56, 0.12)' : 'var(--surface-2)',
+                  border: '1px solid var(--border)',
+                  color: '#e05438',
+                  padding: '2px 8px',
+                  borderRadius: '12px',
+                  fontSize: '11.5px',
+                  fontWeight: 500,
+                  cursor: 'pointer',
+                  transition: 'background 0.12s',
+                }}
+              >
+                <Folder size={12} />
+                <span>{space}</span>
+                <ChevronDown size={11} style={{ opacity: 0.7 }} />
+              </button>
+
+              {showSpaceMenu && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: '100%',
+                    left: 0,
+                    marginTop: '6px',
+                    width: '210px',
+                    background: 'var(--surface)',
+                    border: '1px solid var(--border)',
+                    borderRadius: '8px',
+                    boxShadow: '0 8px 24px rgba(0,0,0,0.18)',
+                    zIndex: 300,
+                    padding: '6px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '4px',
+                  }}
+                >
+                  <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--muted)', padding: '4px 6px', textTransform: 'uppercase' }}>
+                    Move to Space
+                  </div>
+                  <div style={{ maxHeight: '160px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                    {availableSpaces.map(sp => (
+                      <button
+                        key={sp}
+                        onClick={() => handleMigrateSpace(sp)}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '6px 8px',
+                          borderRadius: '5px',
+                          border: 'none',
+                          background: sp === space ? 'rgba(224, 84, 56, 0.12)' : 'transparent',
+                          color: sp === space ? '#e05438' : 'var(--fg)',
+                          fontSize: '12px',
+                          fontWeight: sp === space ? 600 : 400,
+                          cursor: 'pointer',
+                          textAlign: 'left',
+                        }}
+                        onMouseEnter={e => {
+                          if (sp !== space) e.currentTarget.style.background = 'var(--surface-2)';
+                        }}
+                        onMouseLeave={e => {
+                          if (sp !== space) e.currentTarget.style.background = 'transparent';
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <Folder size={13} style={{ color: sp === space ? '#e05438' : 'var(--muted)' }} />
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sp}</span>
+                        </div>
+                        {sp === space && <Check size={13} style={{ color: '#e05438' }} />}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div style={{ borderTop: '1px solid var(--border)', paddingTop: '6px', marginTop: '2px', display: 'flex', gap: '4px' }}>
+                    <input
+                      type="text"
+                      placeholder="New space..."
+                      value={newSpaceInput}
+                      onChange={e => setNewSpaceInput(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter' && newSpaceInput.trim()) {
+                          handleMigrateSpace(newSpaceInput);
+                        }
+                      }}
+                      style={{
+                        flex: 1,
+                        padding: '4px 6px',
+                        borderRadius: '4px',
+                        border: '1px solid var(--border)',
+                        background: 'var(--bg)',
+                        color: 'var(--fg)',
+                        fontSize: '11.5px',
+                        outline: 'none',
+                      }}
+                    />
+                    <button
+                      onClick={() => handleMigrateSpace(newSpaceInput)}
+                      disabled={!newSpaceInput.trim()}
+                      style={{
+                        padding: '4px 8px',
+                        borderRadius: '4px',
+                        border: 'none',
+                        background: newSpaceInput.trim() ? '#e05438' : 'var(--surface-2)',
+                        color: newSpaceInput.trim() ? '#ffffff' : 'var(--muted)',
+                        fontSize: '11px',
+                        fontWeight: 500,
+                        cursor: newSpaceInput.trim() ? 'pointer' : 'not-allowed',
+                      }}
+                    >
+                      Add
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <span>/</span>
+            <span style={{ color: 'var(--fg)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '240px' }}>
+              {title}
+            </span>
           </div>
 
           {/* Right Action Icons */}
@@ -377,6 +579,10 @@ export default function NoteEditorPage() {
                       <span style={{ fontWeight: 600, color: 'var(--fg)' }}>
                         ~{Math.max(1, Math.ceil(((content.replace(/<[^>]+>/g, ' ').match(/\b\S+\b/g) || []).length) / 200))} min
                       </span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ color: 'var(--muted)' }}>Space</span>
+                      <span style={{ fontWeight: 500, color: '#e05438' }}>{space}</span>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <span style={{ color: 'var(--muted)' }}>Tags</span>
@@ -674,20 +880,40 @@ export default function NoteEditorPage() {
         </div>
       </div>
 
-      {/* ── Right AI Assistant Panel (Collapsible) ── */}
+      {/* ── Right AI Assistant Panel (Collapsible & Resizable) ── */}
       {showAiAssistant && (
         <aside
           style={{
-            width: '290px',
-            minWidth: '290px',
+            width: `${aiPanelWidth}px`,
+            minWidth: `${aiPanelWidth}px`,
+            maxWidth: `${aiPanelWidth}px`,
             borderLeft: '1px solid var(--border)',
             background: 'var(--surface)',
             display: 'flex',
             flexDirection: 'column',
             height: '100%',
             overflow: 'hidden',
+            position: 'relative',
+            flexShrink: 0,
           }}
         >
+          {/* Draggable Resize Handle on Left Border */}
+          <div
+            onMouseDown={handleResizeMouseDown}
+            title="Drag to resize AI Assistant panel"
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              bottom: 0,
+              width: '6px',
+              cursor: 'col-resize',
+              zIndex: 50,
+              transition: 'background 0.15s',
+            }}
+            onMouseEnter={e => (e.currentTarget.style.background = 'rgba(224, 84, 56, 0.4)')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+          />
           {/* AI Panel Header */}
           <div
             style={{

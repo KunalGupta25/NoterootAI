@@ -1,22 +1,26 @@
 import { useState, useRef, useEffect } from 'react';
 import { Editor } from '@tiptap/react';
-import { GripVertical, Trash2, ArrowUpDown, Copy, ChevronRight } from 'lucide-react';
+import {
+  GripVertical, Trash2, ArrowUpDown, Copy, ChevronRight,
+  Type, Heading1, Heading2, Heading3, Heading4,
+  List, ListOrdered, CheckSquare, Quote, Code2, Check
+} from 'lucide-react';
 
 interface BlockMenuProps {
   editor: Editor;
 }
 
 const CONVERT_OPTIONS = [
-  { label: 'Text', nodeType: 'paragraph', attrs: {} },
-  { label: 'Heading 1', nodeType: 'heading', attrs: { level: 1 } },
-  { label: 'Heading 2', nodeType: 'heading', attrs: { level: 2 } },
-  { label: 'Heading 3', nodeType: 'heading', attrs: { level: 3 } },
-  { label: 'Heading 4', nodeType: 'heading', attrs: { level: 4 } },
-  { label: 'Bullet List', nodeType: 'bulletList', attrs: {} },
-  { label: 'Numbered List', nodeType: 'orderedList', attrs: {} },
-  { label: 'To-do List', nodeType: 'taskList', attrs: {} },
-  { label: 'Quote', nodeType: 'blockquote', attrs: {} },
-  { label: 'Code Block', nodeType: 'codeBlock', attrs: {} },
+  { label: 'Text', nodeType: 'paragraph', attrs: {}, icon: Type },
+  { label: 'Heading 1', nodeType: 'heading', attrs: { level: 1 }, icon: Heading1 },
+  { label: 'Heading 2', nodeType: 'heading', attrs: { level: 2 }, icon: Heading2 },
+  { label: 'Heading 3', nodeType: 'heading', attrs: { level: 3 }, icon: Heading3 },
+  { label: 'Heading 4', nodeType: 'heading', attrs: { level: 4 }, icon: Heading4 },
+  { label: 'Bullet List', nodeType: 'bulletList', attrs: {}, icon: List },
+  { label: 'Numbered List', nodeType: 'orderedList', attrs: {}, icon: ListOrdered },
+  { label: 'To-do List', nodeType: 'taskList', attrs: {}, icon: CheckSquare },
+  { label: 'Quote', nodeType: 'blockquote', attrs: {}, icon: Quote },
+  { label: 'Code Block', nodeType: 'codeBlock', attrs: {}, icon: Code2 },
 ];
 
 export default function BlockMenu({ editor }: BlockMenuProps) {
@@ -348,31 +352,47 @@ export default function BlockMenu({ editor }: BlockMenuProps) {
                   zIndex: 10000,
                 }}
               >
-                {CONVERT_OPTIONS.map(opt => (
-                  <button
-                    key={opt.label}
-                    className="block-menu-item"
-                    onClick={() => handleConvert(opt.nodeType, opt.attrs)}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      width: '100%',
-                      padding: '6px 10px',
-                      border: 'none',
-                      borderRadius: '5px',
-                      background: 'transparent',
-                      color: 'var(--fg)',
-                      fontSize: '12.5px',
-                      cursor: 'pointer',
-                      textAlign: 'left',
-                    }}
-                    onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-2)')}
-                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-                  >
-                    <span>{opt.label}</span>
-                  </button>
-                ))}
+                {CONVERT_OPTIONS.map(opt => {
+                  const isActive = opt.nodeType === 'heading'
+                    ? editor.isActive('heading', opt.attrs)
+                    : editor.isActive(opt.nodeType);
+                  const Icon = opt.icon;
+
+                  return (
+                    <button
+                      key={opt.label}
+                      className="block-menu-item"
+                      onClick={() => handleConvert(opt.nodeType, opt.attrs)}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '6px 10px',
+                        border: 'none',
+                        borderRadius: '5px',
+                        background: isActive ? 'rgba(224, 84, 56, 0.12)' : 'transparent',
+                        color: isActive ? '#e05438' : 'var(--fg)',
+                        fontSize: '12.5px',
+                        fontWeight: isActive ? 600 : 400,
+                        cursor: 'pointer',
+                        textAlign: 'left',
+                        transition: 'background 0.12s, color 0.12s',
+                      }}
+                      onMouseEnter={e => {
+                        if (!isActive) e.currentTarget.style.background = 'var(--surface-2)';
+                      }}
+                      onMouseLeave={e => {
+                        if (!isActive) e.currentTarget.style.background = 'transparent';
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <Icon size={14} style={{ color: isActive ? '#e05438' : 'var(--muted)' }} />
+                        <span>{opt.label}</span>
+                      </div>
+                      {isActive && <Check size={13} style={{ color: '#e05438' }} />}
+                    </button>
+                  );
+                })}
               </div>
             )}
           </div>

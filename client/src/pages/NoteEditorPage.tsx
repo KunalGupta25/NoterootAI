@@ -4,10 +4,10 @@ import NoteEditor from '../components/Editor/NoteEditor';
 import { useNoteStore } from '../stores/noteStore';
 import {
   Star, Share2, Info, Sparkles, X, Send, Paperclip,
-  Bold, Italic, Underline, Strikethrough, Code,
+  Bold, Italic, Underline, Strikethrough, Code, Code2,
   Quote, Link as LinkIcon, List, ListOrdered, Table, Image,
   Wand2, Check, Scissors, Plus, Palette, Globe,
-  Folder, ChevronDown
+  Folder, ChevronDown, CheckSquare
 } from 'lucide-react';
 import { useSettingsStore } from '../stores/settingsStore';
 import { isBuiltinProvider } from '../lib/providerConfig';
@@ -27,6 +27,13 @@ export default function NoteEditorPage() {
   const [showAiAssistant, setShowAiAssistant] = useState(false);
   const [aiTab, setAiTab] = useState<'Chat' | 'Edit'>('Edit');
   const [editorInstance, setEditorInstance] = useState<any>(null);
+  const [, setEditorTick] = useState(0);
+
+  const handleEditorReady = useCallback((inst: any) => {
+    setEditorInstance(inst);
+    inst.on('selectionUpdate', () => setEditorTick(t => t + 1));
+    inst.on('transaction', () => setEditorTick(t => t + 1));
+  }, []);
   const [copiedShare, setCopiedShare] = useState(false);
   const [showInfoModal, setShowInfoModal] = useState(false);
   const infoModalRef = useRef<HTMLDivElement>(null);
@@ -768,7 +775,7 @@ export default function NoteEditorPage() {
             style={{
               display: 'flex',
               alignItems: 'center',
-              gap: '4px',
+              gap: '3px',
               padding: '6px 8px',
               background: 'var(--surface)',
               border: '1px solid var(--border)',
@@ -780,51 +787,92 @@ export default function NoteEditorPage() {
             <button
               title="Heading 1"
               onClick={() => editorInstance?.chain().focus().toggleHeading({ level: 1 }).run()}
-              style={toolbarBtnStyle}
+              style={getToolbarBtnStyle(editorInstance?.isActive('heading', { level: 1 }))}
             >
               H1
             </button>
             <button
+              title="Heading 2"
+              onClick={() => editorInstance?.chain().focus().toggleHeading({ level: 2 }).run()}
+              style={getToolbarBtnStyle(editorInstance?.isActive('heading', { level: 2 }))}
+            >
+              H2
+            </button>
+            <button
               title="Bold"
               onClick={() => editorInstance?.chain().focus().toggleBold().run()}
-              style={toolbarBtnStyle}
+              style={getToolbarBtnStyle(editorInstance?.isActive('bold'))}
             >
               <Bold size={14} />
             </button>
             <button
               title="Italic"
               onClick={() => editorInstance?.chain().focus().toggleItalic().run()}
-              style={toolbarBtnStyle}
+              style={getToolbarBtnStyle(editorInstance?.isActive('italic'))}
             >
               <Italic size={14} />
             </button>
             <button
               title="Underline"
               onClick={() => editorInstance?.chain().focus().toggleUnderline?.().run()}
-              style={toolbarBtnStyle}
+              style={getToolbarBtnStyle(editorInstance?.isActive('underline'))}
             >
               <Underline size={14} />
             </button>
             <button
               title="Strikethrough"
               onClick={() => editorInstance?.chain().focus().toggleStrike().run()}
-              style={toolbarBtnStyle}
+              style={getToolbarBtnStyle(editorInstance?.isActive('strike'))}
             >
               <Strikethrough size={14} />
             </button>
+
+            <div style={{ width: '1px', height: '16px', background: 'var(--border)', margin: '0 4px' }} />
+
             <button
               title="Inline Code"
               onClick={() => editorInstance?.chain().focus().toggleCode().run()}
-              style={toolbarBtnStyle}
+              style={getToolbarBtnStyle(editorInstance?.isActive('code'))}
             >
               <Code size={14} />
             </button>
             <button
+              title="Code Block"
+              onClick={() => editorInstance?.chain().focus().toggleCodeBlock().run()}
+              style={getToolbarBtnStyle(editorInstance?.isActive('codeBlock'))}
+            >
+              <Code2 size={14} />
+            </button>
+            <button
               title="Quote"
               onClick={() => editorInstance?.chain().focus().toggleBlockquote().run()}
-              style={toolbarBtnStyle}
+              style={getToolbarBtnStyle(editorInstance?.isActive('blockquote'))}
             >
               <Quote size={14} />
+            </button>
+
+            <div style={{ width: '1px', height: '16px', background: 'var(--border)', margin: '0 4px' }} />
+
+            <button
+              title="Bullet list"
+              onClick={() => editorInstance?.chain().focus().toggleBulletList().run()}
+              style={getToolbarBtnStyle(editorInstance?.isActive('bulletList'))}
+            >
+              <List size={14} />
+            </button>
+            <button
+              title="Numbered list"
+              onClick={() => editorInstance?.chain().focus().toggleOrderedList().run()}
+              style={getToolbarBtnStyle(editorInstance?.isActive('orderedList'))}
+            >
+              <ListOrdered size={14} />
+            </button>
+            <button
+              title="Checklist"
+              onClick={() => editorInstance?.chain().focus().toggleTaskList().run()}
+              style={getToolbarBtnStyle(editorInstance?.isActive('taskList'))}
+            >
+              <CheckSquare size={14} />
             </button>
             <button
               title="Link"
@@ -832,28 +880,14 @@ export default function NoteEditorPage() {
                 const url = prompt('Enter URL:');
                 if (url) editorInstance?.chain().focus().setLink({ href: url }).run();
               }}
-              style={toolbarBtnStyle}
+              style={getToolbarBtnStyle(editorInstance?.isActive('link'))}
             >
               <LinkIcon size={14} />
             </button>
             <button
-              title="Bullet list"
-              onClick={() => editorInstance?.chain().focus().toggleBulletList().run()}
-              style={toolbarBtnStyle}
-            >
-              <List size={14} />
-            </button>
-            <button
-              title="Numbered list"
-              onClick={() => editorInstance?.chain().focus().toggleOrderedList().run()}
-              style={toolbarBtnStyle}
-            >
-              <ListOrdered size={14} />
-            </button>
-            <button
               title="Table"
               onClick={() => editorInstance?.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}
-              style={toolbarBtnStyle}
+              style={getToolbarBtnStyle(false)}
             >
               <Table size={14} />
             </button>
@@ -863,7 +897,7 @@ export default function NoteEditorPage() {
                 const src = prompt('Enter image URL:');
                 if (src) editorInstance?.chain().focus().setImage({ src }).run();
               }}
-              style={toolbarBtnStyle}
+              style={getToolbarBtnStyle(false)}
             >
               <Image size={14} />
             </button>
@@ -874,7 +908,7 @@ export default function NoteEditorPage() {
             <NoteEditor
               initialContent={content}
               onChange={handleContentChange}
-              onEditorReady={setEditorInstance}
+              onEditorReady={handleEditorReady}
             />
           </div>
         </div>
@@ -1125,17 +1159,18 @@ export default function NoteEditorPage() {
   );
 }
 
-const toolbarBtnStyle: React.CSSProperties = {
+const getToolbarBtnStyle = (isActive: boolean = false): React.CSSProperties => ({
   width: '28px',
   height: '28px',
-  borderRadius: '4px',
+  borderRadius: '6px',
   border: 'none',
-  background: 'transparent',
-  color: 'var(--fg)',
+  background: isActive ? 'rgba(224, 84, 56, 0.16)' : 'transparent',
+  color: isActive ? '#e05438' : 'var(--muted)',
   fontSize: '12px',
   fontWeight: 600,
   cursor: 'pointer',
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
-};
+  transition: 'all 0.12s ease',
+});

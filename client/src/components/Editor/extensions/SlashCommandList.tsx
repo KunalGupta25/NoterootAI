@@ -119,11 +119,17 @@ export const SlashCommandList = forwardRef((props: any, ref) => {
                   padding: '8px 16px',
                   border: 'none',
                   borderRadius: '0',
-                  background: thisIdx === selectedIndex ? 'var(--bg)' : 'transparent',
-                  color: thisIdx === selectedIndex ? 'var(--accent)' : 'var(--fg)',
+                  background: thisIdx === selectedIndex ? 'rgba(224, 84, 56, 0.12)' : 'transparent',
+                  color: thisIdx === selectedIndex ? '#e05438' : 'var(--fg)',
                   cursor: 'pointer',
                   textAlign: 'left',
-                  transition: 'background 0.1s',
+                  transition: 'background 0.1s, color 0.1s',
+                }}
+                onMouseEnter={e => {
+                  if (thisIdx !== selectedIndex) e.currentTarget.style.background = 'var(--surface-2)';
+                }}
+                onMouseLeave={e => {
+                  if (thisIdx !== selectedIndex) e.currentTarget.style.background = 'transparent';
                 }}
               >
                 <span style={{
@@ -133,15 +139,17 @@ export const SlashCommandList = forwardRef((props: any, ref) => {
                   alignItems: 'center',
                   justifyContent: 'center',
                   borderRadius: '6px',
-                  border: '1px solid var(--border)',
-                  background: 'var(--bg)',
-                  fontSize: '16px',
+                  border: thisIdx === selectedIndex ? '1px solid rgba(224, 84, 56, 0.35)' : '1px solid var(--border)',
+                  background: thisIdx === selectedIndex ? 'rgba(224, 84, 56, 0.15)' : 'var(--surface-2)',
+                  color: thisIdx === selectedIndex ? '#e05438' : 'var(--fg)',
+                  fontSize: '15px',
                   flexShrink: 0,
+                  fontWeight: 600,
                 }}>
                   {item.icon}
                 </span>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
-                  <span style={{ fontSize: '13px', fontWeight: 500 }}>{item.title}</span>
+                  <span style={{ fontSize: '13px', fontWeight: 500, color: thisIdx === selectedIndex ? '#e05438' : 'var(--fg)' }}>{item.title}</span>
                   <span style={{ fontSize: '11px', color: 'var(--muted)' }}>{item.description}</span>
                 </div>
               </button>

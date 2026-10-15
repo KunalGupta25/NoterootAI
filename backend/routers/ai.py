@@ -50,22 +50,34 @@ async def suggest(request: SuggestRequest) -> SuggestResponse:
     return await suggest_notes(request)
 
 
-@router.post("/chat")
-async def streaming_chat(request: ChatRequest) -> StreamingResponse:
+SSE_HEADERS = {
+    "Cache-Control": "no-cache",
+    "X-Accel-Buffering": "no",
+    "Connection": "keep-alive",
+}
+
+
+def _validate_request_provider(provider: str, api_key: str | None, custom_base_url: str | None, model: str | None) -> None:
     try:
-        get_provider(request.provider, request.api_key, request.custom_base_url)
+        get_provider(provider, api_key, custom_base_url)
+        if (provider == "custom" or custom_base_url) and not (model and model.strip()):
+            raise HTTPException(status_code=400, detail="Model is required for custom provider")
+    except HTTPException:
+        raise
     except Exception as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
-    return StreamingResponse(chat(request), media_type="text/event-stream")
+
+
+@router.post("/chat")
+async def streaming_chat(request: ChatRequest) -> StreamingResponse:
+    _validate_request_provider(request.provider, request.api_key, request.custom_base_url, request.model)
+    return StreamingResponse(chat(request), media_type="text/event-stream", headers=SSE_HEADERS)
 
 
 @router.post("/assist")
 async def streaming_assist(request: AssistRequest) -> StreamingResponse:
-    try:
-        get_provider(request.provider, request.api_key, request.custom_base_url)
-    except Exception as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
-    return StreamingResponse(assist(request), media_type="text/event-stream")
+    _validate_request_provider(request.provider, request.api_key, request.custom_base_url, request.model)
+    return StreamingResponse(assist(request), media_type="text/event-stream", headers=SSE_HEADERS)
 
 
 @router.get("/assist/capabilities", response_model=CapabilitiesResponse)
@@ -79,7 +91,8 @@ async def assist_capabilities() -> CapabilitiesResponse:
 
 @router.post("/agent")
 async def agent(request: AgentRequest) -> StreamingResponse:
-    return StreamingResponse(run_agent(request), media_type="text/event-stream")
+    _validate_request_provider(request.provider, request.api_key, request.custom_base_url, request.model)
+    return StreamingResponse(run_agent(request), media_type="text/event-stream", headers=SSE_HEADERS)
 
 
 @router.post("/models", response_model=ModelsResponse)

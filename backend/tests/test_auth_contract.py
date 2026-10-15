@@ -49,7 +49,12 @@ def client():
 def test_health_contract():
     response = client().get("/api/health")
     assert response.status_code == 200
-    assert response.json() == {"status": "ok", "message": "NoteRoot API is running"}
+    data = response.json()
+    assert data["status"] == "ok"
+    assert data["message"] == "NoteRoot API is running"
+    assert "db" in data
+    assert isinstance(data["db"]["mongo"], bool)
+    assert isinstance(data["db"]["neo4j"], bool)
 
 
 def test_signup_login_and_settings_contract():

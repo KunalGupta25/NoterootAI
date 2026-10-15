@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 
@@ -21,19 +22,28 @@ from routers.plugins import router as plugins_router
 settings = get_settings()
 
 
+async def _connect_mongo():
+    try:
+        await mongo.connect(settings)
+        await mongo.ensure_indexes()
+    except Exception:
+        logging.exception("MongoDB connection failed; the service will remain available for health checks")
+
+
+async def _connect_neo4j():
+    try:
+        await neo4j.connect(settings)
+    except Exception:
+        logging.exception("Neo4j connection failed; the service will remain available for health checks")
+
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    for name, connect in (("MongoDB", mongo.connect), ("Neo4j", neo4j.connect)):
-        try:
-            await connect(settings)
-        except Exception:
-            logging.exception("%s connection failed; the service will remain available for health checks", name)
-    try:
-        await mongo.ensure_indexes()
-    except Exception:
-        logging.exception("MongoDB index setup failed")
+    mongo_task = asyncio.create_task(_connect_mongo())
+    neo4j_task = asyncio.create_task(_connect_neo4j())
     yield
+    mongo_task.cancel()
+    neo4j_task.cancel()
     await neo4j.close()
     await mongo.close()
 
@@ -51,6 +61,19 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    @app.get("/health")
+    @app.get("/api/health")
+    async def health() -> dict:
+        return {
+            "status": "ok",
+            "message": "NoteRoot API is running",
+            "db": {
+                "mongo": mongo.is_connected,
+                "neo4j": neo4j.is_connected,
+            },
+        }
+
     app.include_router(auth_router)
     app.include_router(ai_router)
     app.include_router(notes_router)
@@ -60,11 +83,6 @@ def create_app() -> FastAPI:
     @app.exception_handler(HTTPException)
     async def http_exception_handler(_: Request, error: HTTPException) -> JSONResponse:
         return JSONResponse(status_code=error.status_code, content={"error": error.detail})
-
-    @app.get("/health")
-    @app.get("/api/health")
-    async def health() -> dict[str, str]:
-        return {"status": "ok", "message": "NoteRoot API is running"}
 
     return app
 

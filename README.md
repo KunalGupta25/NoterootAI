@@ -272,6 +272,18 @@ We are currently preparing to build **Phase 4 (Community Ecosystem)**.
 
 ---
 
+## 🌐 Production Deployment (Render & Vercel)
+
+- **Backend (Render Free Tier):** Deploy using Docker with the provided [`render.yaml`](file:///C:/Projects/NoterootAI/render.yaml). Health checks run against `/api/health`.
+  - Set `CLIENT_ORIGINS` in your Render Environment Variables to your Vercel frontend URL:
+    ```bash
+    CLIENT_ORIGINS=https://noteroot-ai.vercel.app,http://localhost:5173
+    ```
+- **Frontend (Vercel):** Set `VITE_API_URL` to your Render backend URL (e.g. `https://noteroot-backend.onrender.com`).
+- *Note on Render Free Tier:* Web services spin down after 15 minutes of inactivity and take ~30–60 seconds to cold start. The client includes cold-start detection and health retries.
+
+---
+
 ## 🛠️ How to Start & Use the Project
 
 ### Prerequisites

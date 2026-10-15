@@ -7,6 +7,10 @@ class MongoDatabase:
     client: AsyncIOMotorClient | None = None
     database: AsyncIOMotorDatabase | None = None
 
+    @property
+    def is_connected(self) -> bool:
+        return self.database is not None
+
     async def connect(self, settings: Settings) -> None:
         if not settings.mongodb_uri:
             return

@@ -16,17 +16,21 @@ TOOLS = [
 
 
 async def run_agent(request: AgentRequest):
-    provider = get_provider(request.provider, request.api_key, request.custom_base_url)
-    messages = [{"role": "system", "content": "You are NoteRootAI Agent. Use one tool at a time. Never invent note IDs; search first."}]
-    for message in request.messages:
-        entry = {"role": message.role, "content": message.content}
-        if message.tool_call_id:
-            entry["tool_call_id"] = message.tool_call_id
-        if message.tool_name:
-            entry["name"] = message.tool_name
-        if message.tool_calls:
-            entry["tool_calls"] = message.tool_calls
-        messages.append(entry)
-    async for event in provider.agent(messages, TOOLS, request.model, request.temperature, request.max_tokens):
-        yield f"data: {json.dumps(event)}\n\n"
-    yield "data: [DONE]\n\n"
+    try:
+        provider = get_provider(request.provider, request.api_key, request.custom_base_url)
+        messages = [{"role": "system", "content": "You are NoteRootAI Agent. Use one tool at a time. Never invent note IDs; search first."}]
+        for message in request.messages:
+            entry = {"role": message.role, "content": message.content}
+            if message.tool_call_id:
+                entry["tool_call_id"] = message.tool_call_id
+            if message.tool_name:
+                entry["name"] = message.tool_name
+            if message.tool_calls:
+                entry["tool_calls"] = message.tool_calls
+            messages.append(entry)
+        async for event in provider.agent(messages, TOOLS, request.model, request.temperature, request.max_tokens):
+            yield f"data: {json.dumps(event)}\n\n"
+        yield "data: [DONE]\n\n"
+    except Exception as error:
+        yield f"data: {json.dumps({'type': 'error', 'content': str(error)})}\n\n"
+        yield "data: [DONE]\n\n"

@@ -1,6 +1,6 @@
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, model_validator
 
 
 class EmbedRequest(BaseModel):
@@ -25,11 +25,11 @@ class EmbedResponse(BaseModel):
 
 class Message(BaseModel):
     role: str
-    content: str
+    content: str = Field(..., max_length=100_000)
 
 
 class ChatRequest(BaseModel):
-    messages: list[Message]
+    messages: list[Message] = Field(..., max_length=30)
     provider: str = "openai"
     model: str | None = None
     api_key: str | None = None
@@ -40,7 +40,14 @@ class ChatRequest(BaseModel):
     context_note_content: str | None = None
     use_vault: bool = True
     temperature: float = 0.7
-    max_tokens: int = 2048
+    max_tokens: int = Field(default=2048, le=4096)
+
+    @model_validator(mode="after")
+    def validate_total_chars(self) -> "ChatRequest":
+        total = sum(len(m.content) for m in self.messages)
+        if total > 120_000:
+            raise ValueError(f"Total message content exceeds 120,000 characters (got {total})")
+        return self
 
 
 class SearchRequest(BaseModel):
@@ -48,7 +55,7 @@ class SearchRequest(BaseModel):
     provider: str = "openai"
     api_key: str | None = None
     custom_base_url: str | None = None
-    top_k: int = 5
+    top_k: int = Field(default=5, le=5)
 
 
 class SearchResult(BaseModel):
@@ -70,7 +77,7 @@ class SuggestRequest(BaseModel):
     provider: str = "openai"
     api_key: str | None = None
     custom_base_url: str | None = None
-    top_k: int = 5
+    top_k: int = Field(default=5, le=5)
 
 
 class SuggestResult(BaseModel):
@@ -87,7 +94,7 @@ class SuggestResponse(BaseModel):
 
 class AgentMessage(BaseModel):
     role: str
-    content: str | None = None
+    content: str | None = Field(default=None, max_length=100_000)
     tool_call_id: str | None = None
     tool_name: str | None = None
     tool_calls: list[dict[str, Any]] | None = None
@@ -101,15 +108,22 @@ class AgentToolResult(BaseModel):
 
 
 class AgentRequest(BaseModel):
-    messages: list[AgentMessage]
+    messages: list[AgentMessage] = Field(..., max_length=30)
     provider: str = "openai"
     model: str | None = None
     api_key: str | None = None
     custom_base_url: str | None = None
     context_note_id: str | None = None
     temperature: float = 0.5
-    max_tokens: int = 4096
+    max_tokens: int = Field(default=4096, le=4096)
     tool_result: AgentToolResult | None = None
+
+    @model_validator(mode="after")
+    def validate_total_chars(self) -> "AgentRequest":
+        total = sum(len(m.content or "") for m in self.messages)
+        if total > 120_000:
+            raise ValueError(f"Total message content exceeds 120,000 characters (got {total})")
+        return self
 
 
 class ModelsRequest(BaseModel):
@@ -125,18 +139,18 @@ class ModelsResponse(BaseModel):
 
 class VaultOptions(BaseModel):
     enabled: bool = False
-    top_k: int = 3
+    top_k: int = Field(default=3, le=5)
     exclude_note_id: str | None = None
     min_score: float = 0.65
 
 
 class WebOptions(BaseModel):
     enabled: bool = False
-    max_results: int = 3
+    max_results: int = Field(default=3, le=5)
 
 
 class AssistRequest(BaseModel):
-    messages: list[Message]
+    messages: list[Message] = Field(..., max_length=30)
     mode: str = "chat"
     provider: str = "openai"
     model: str | None = None
@@ -145,10 +159,16 @@ class AssistRequest(BaseModel):
     vault: VaultOptions = VaultOptions()
     web: WebOptions = WebOptions()
     temperature: float = 0.5
-    max_tokens: int = 1024
+    max_tokens: int = Field(default=1024, le=4096)
+
+    @model_validator(mode="after")
+    def validate_total_chars(self) -> "AssistRequest":
+        total = sum(len(m.content) for m in self.messages)
+        if total > 120_000:
+            raise ValueError(f"Total message content exceeds 120,000 characters (got {total})")
+        return self
 
 
 class CapabilitiesResponse(BaseModel):
     web_available: bool
     web_provider: str | None = None
-

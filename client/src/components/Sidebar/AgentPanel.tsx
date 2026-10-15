@@ -113,7 +113,17 @@ export default function AgentPanel() {
         }),
       });
 
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) {
+        let errorMsg = `Error ${res.status}`;
+        try {
+          const body = await res.json();
+          errorMsg = body.error || body.detail || JSON.stringify(body);
+        } catch {
+          const text = await res.text();
+          if (text) errorMsg = text;
+        }
+        throw new Error(errorMsg);
+      }
       if (!res.body) throw new Error('No response body');
 
       const reader = res.body.getReader();
@@ -186,9 +196,10 @@ export default function AgentPanel() {
           }
         }
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Agent error:', err);
-      setMessages((prev) => [...prev, { role: 'assistant', content: '⚠ Failed to reach AI service.' }]);
+      const message = err?.message || 'Failed to reach AI service.';
+      setMessages((prev) => [...prev, { role: 'assistant', content: `⚠ ${message}` }]);
     } finally {
       setLoading(false);
     }

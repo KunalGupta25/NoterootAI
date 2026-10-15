@@ -1,3 +1,4 @@
+import asyncio
 import re
 
 from bs4 import BeautifulSoup
@@ -215,16 +216,30 @@ async def assist(request: "AssistRequest"):
         }
         yield f"data: {json.dumps(meta_payload)}\n\n"
 
-        # Stream LLM generation
+        # Stream LLM generation with keep-alive ping and finish detection
         messages_dicts = [{"role": m.role, "content": m.content} for m in raw_messages]
-        async for chunk in provider.chat_stream(
+        stream_gen = provider.chat_stream(
             messages=messages_dicts,
             model=request.model,
             temperature=request.temperature,
             max_tokens=request.max_tokens,
             extra_body=extra_body,
-        ):
+        )
+        has_sent_done = False
+        while True:
+            try:
+                chunk = await asyncio.wait_for(stream_gen.__anext__(), timeout=15.0)
+            except TimeoutError:
+                yield ": ping\n\n"
+                continue
+            except StopAsyncIteration:
+                break
+            if chunk.get("type") == "done":
+                has_sent_done = True
             yield f"data: {json.dumps(chunk)}\n\n"
+
+        if not has_sent_done:
+            yield f"data: {json.dumps({'type': 'done', 'finish_reason': 'stop'})}\n\n"
 
         yield "data: [DONE]\n\n"
 

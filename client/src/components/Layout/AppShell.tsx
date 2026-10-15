@@ -3,11 +3,12 @@ import {
   Home, Search, FileText, Network, Bot,
   Puzzle, Settings, Sun, Moon,
   PanelLeftClose, PanelLeft, HelpCircle, Plus,
-  Folder, FolderPlus, ChevronRight, ChevronDown
+  Folder, FolderPlus, ChevronRight, ChevronDown, Globe, LogOut
 } from 'lucide-react';
 import { useNoteStore } from '../../stores/noteStore';
 import { useAuthStore } from '../../stores/authStore';
 import { useSettingsStore } from '../../stores/settingsStore';
+import { performLogout } from '../../lib/sessionManager';
 import CommandPalette from '../CommandPalette/CommandPalette';
 import OnboardingModal from '../Onboarding/OnboardingModal';
 import { useEffect, useState, useMemo } from 'react';
@@ -145,13 +146,13 @@ export default function AppShell() {
   }, []);
 
   const isActive = (path: string) => {
-    if (path === '/') return location.pathname === '/' && !location.search;
-    if (path === '/notes') return location.pathname === '/notes' || (location.pathname === '/' && location.search.includes('tag='));
+    if (path === '/app' || path === '/') return (location.pathname === '/app' || location.pathname === '/') && !location.search;
+    if (path === '/notes') return location.pathname === '/notes' || (location.pathname === '/app' && location.search.includes('tag='));
     return location.pathname.startsWith(path);
   };
 
   const navItems = [
-    { label: 'Home', path: '/', icon: <Home size={18} /> },
+    { label: 'Home', path: '/app', icon: <Home size={18} /> },
     { label: 'Search', path: '#search', icon: <Search size={18} />, isAction: () => setPaletteOpen(true) },
     { label: 'All Notes', path: '/notes', icon: <FileText size={18} /> },
     { label: 'Graph View', path: '/graph', icon: <Network size={18} /> },
@@ -208,7 +209,7 @@ export default function AppShell() {
           }}
         >
           <Link
-            to="/"
+            to="/app"
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -691,6 +692,26 @@ export default function AppShell() {
               >
                 <PanelLeft size={18} />
               </button>
+              <button
+                onClick={() => performLogout('/')}
+                title="Log out"
+                style={{
+                  width: '36px',
+                  height: '36px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderRadius: '6px',
+                  background: 'transparent',
+                  border: 'none',
+                  color: 'var(--muted)',
+                  cursor: 'pointer',
+                }}
+                onMouseEnter={e => (e.currentTarget.style.color = '#ef4444')}
+                onMouseLeave={e => (e.currentTarget.style.color = 'var(--muted)')}
+              >
+                <LogOut size={17} />
+              </button>
             </>
           ) : (
             <>
@@ -755,6 +776,23 @@ export default function AppShell() {
                 >
                   {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
                 </button>
+                <Link
+                  to="/landing"
+                  title="Product Overview & Features"
+                  style={{
+                    color: 'var(--muted)',
+                    padding: '6px',
+                    borderRadius: '6px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    textDecoration: 'none',
+                  }}
+                  onMouseEnter={e => (e.currentTarget.style.color = '#e05438')}
+                  onMouseLeave={e => (e.currentTarget.style.color = 'var(--muted)')}
+                >
+                  <Globe size={16} />
+                </Link>
                 <button
                   onClick={() => setOnboardingOpen(true)}
                   title="Tutorial & Feature Tour"
@@ -791,6 +829,25 @@ export default function AppShell() {
                 >
                   <Settings size={16} />
                 </Link>
+                <button
+                  onClick={() => performLogout('/')}
+                  title="Log out"
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: 'var(--muted)',
+                    cursor: 'pointer',
+                    padding: '6px',
+                    borderRadius: '6px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                  onMouseEnter={e => (e.currentTarget.style.color = '#ef4444')}
+                  onMouseLeave={e => (e.currentTarget.style.color = 'var(--muted)')}
+                >
+                  <LogOut size={16} />
+                </button>
               </div>
             </>
           )}

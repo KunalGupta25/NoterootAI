@@ -63,16 +63,19 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
   syncStatus: 'idle',
 
   initDB: async () => {
+    // 1. Immediately wipe in-memory notes to ensure zero cross-account bleeding
+    set({ notes: [], syncStatus: 'idle' });
+
     const auth = useAuthStore.getState();
     localforage.config({ name: 'NoteRoot', storeName: 'vault' });
 
     const keys = await localforage.keys();
     const loadedNotes: Note[] = [];
-    const prefix = vaultPrefix();
-    const legacyKeys: string[] = [];
+    const prefix = vaultPrefix(); // strictly note_${userId}_
+
     for (const key of keys) {
-      const isLegacyKey = auth.token && /^note_[0-9a-f-]{36}$/i.test(key);
-      if (key.startsWith(prefix) || isLegacyKey) {
+      // Strictly load notes that belong to the current authenticated user (or guest)
+      if (key.startsWith(prefix)) {
         const note = await localforage.getItem<Note>(key);
         if (note) {
           if (note.parentId === undefined) note.parentId = null;
@@ -82,16 +85,8 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
           if (!note.space) note.space = note.properties?.space || (note.tags && note.tags.length > 0 ? note.tags[0] : 'Other');
           if (!note.createdAt) note.createdAt = note.updatedAt;
           loadedNotes.push(note);
-          if (isLegacyKey) {
-            legacyKeys.push(key);
-            await localforage.setItem(vaultKey(note._id), { ...note, synced: false });
-          }
         }
       }
-    }
-
-    for (const key of legacyKeys) {
-      await localforage.removeItem(key);
     }
 
     loadedNotes.sort((a, b) => b.updatedAt - a.updatedAt);

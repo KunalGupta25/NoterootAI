@@ -247,7 +247,7 @@ export default function NoteEditorPage() {
               color: 'var(--muted)',
             }}
           >
-            <Link to="/" style={{ color: 'inherit', textDecoration: 'none' }}>
+            <Link to="/app" style={{ color: 'inherit', textDecoration: 'none' }}>
               NoteRoot AI
             </Link>
             <span>/</span>

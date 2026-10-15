@@ -21,6 +21,9 @@ const AIChatPage = lazy(() => import('./pages/AIChatPage'));
 const PluginsPage = lazy(() => import('./pages/PluginsPage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 const AuthPage = lazy(() => import('./pages/AuthPage'));
+const LandingPage = lazy(() => import('./pages/LandingPage'));
+const CookiePolicyPage = lazy(() => import('./pages/CookiePolicyPage'));
+import CookieBanner from './components/Common/CookieBanner';
 
 function RouteFallback() {
   return <div style={{ padding: '24px', color: 'var(--muted)' }}>Loading…</div>;
@@ -102,9 +105,16 @@ function App() {
     <BrowserRouter>
       <Suspense fallback={<RouteFallback />}>
       <Routes>
+        <Route path="/" element={<LandingPage />} />
+        <Route path="/landing" element={<LandingPage />} />
+        <Route path="/cookie-policy" element={<CookiePolicyPage />} />
         <Route path="/auth" element={<AuthPage />} />
-        <Route path="/" element={token ? <AppShell /> : <Navigate to="/auth" replace />}>
+
+        {/* Authenticated Workspace */}
+        <Route path="/app" element={token ? <AppShell /> : <Navigate to="/auth" replace />}>
           <Route index element={<Dashboard />} />
+        </Route>
+        <Route element={token ? <AppShell /> : <Navigate to="/auth" replace />}>
           <Route path="notes" element={<Dashboard />} />
           <Route path="notes/new" element={<NewNotePage />} />
           <Route path="notes/:id" element={<NoteEditorPage />} />
@@ -112,11 +122,13 @@ function App() {
           <Route path="chat" element={<AIChatPage />} />
           <Route path="plugins" element={<PluginsPage />} />
           <Route path="settings" element={<SettingsPage />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
+
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       </Suspense>
       <PluginOverlays />
+      <CookieBanner />
     </BrowserRouter>
   );
 }

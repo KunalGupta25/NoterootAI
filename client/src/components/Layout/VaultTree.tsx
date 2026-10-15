@@ -129,7 +129,7 @@ function ContextMenu({ menu, onClose }: ContextMenuProps) {
             : `Delete "${menu.node.title}"?`;
           if (confirm(msg)) {
             await deleteNote(menu.node._id);
-            navigate('/');
+            navigate('/app');
           }
         },
         true

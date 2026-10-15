@@ -1,12 +1,14 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useAuthStore } from '../stores/authStore';
 import { useNoteStore } from '../stores/noteStore';
+import { performLogout } from '../lib/sessionManager';
 import { BUILTIN_PROVIDERS, BUILTIN_PROVIDER_IDS } from '../lib/providerConfig';
 import {
   User, Edit3, Bot, Cloud, Puzzle,
   Palette, Check, Plus, Trash2, ExternalLink, Server, Download,
-  RefreshCw, AlertCircle, CheckCircle2
+  RefreshCw, AlertCircle, CheckCircle2, LogOut, ShieldCheck
 } from 'lucide-react';
 import { PluginSettingsPanels } from '../plugins/slots/PluginSettingsPanels';
 import { fetchAvailableModels } from '../services/modelService';
@@ -376,6 +378,85 @@ export default function SettingsPage() {
                       <Check size={14} /> Saved successfully
                     </span>
                   )}
+                </div>
+
+                {/* Account & Session Isolation */}
+                <div
+                  style={{
+                    marginTop: '24px',
+                    paddingTop: '20px',
+                    borderTop: '1px solid var(--border)',
+                  }}
+                >
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--fg)', marginBottom: '8px' }}>
+                    Account & Session Security
+                  </label>
+                  <div
+                    style={{
+                      background: 'var(--surface)',
+                      border: '1px solid var(--border)',
+                      borderRadius: '8px',
+                      padding: '16px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '12px',
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                      <div>
+                        <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--fg)' }}>
+                          {user?.name || 'Authenticated User'}
+                        </div>
+                        <div style={{ fontSize: '12px', color: 'var(--muted)' }}>
+                          {user?.email || 'Logged in to cloud vault'}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => performLogout('/')}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          background: 'rgba(239, 68, 68, 0.1)',
+                          color: '#ef4444',
+                          border: '1px solid rgba(239, 68, 68, 0.25)',
+                          borderRadius: '6px',
+                          padding: '7px 14px',
+                          fontSize: '12.5px',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          transition: 'background 0.15s ease',
+                        }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(239, 68, 68, 0.18)')}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)')}
+                      >
+                        <LogOut size={14} />
+                        <span>Log Out</span>
+                      </button>
+                    </div>
+
+                    <div style={{ fontSize: '11.5px', color: 'var(--muted)', lineHeight: 1.5 }}>
+                      Logging out securely purges all cached notes, active tabs, and AI chat logs from this device
+                      so another account will never see your private notes.
+                    </div>
+
+                    <div style={{ borderTop: '1px solid var(--border)', paddingTop: '10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <Link
+                        to="/cookie-policy"
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          color: 'var(--accent)',
+                          fontSize: '12px',
+                          textDecoration: 'none',
+                        }}
+                      >
+                        <ShieldCheck size={14} />
+                        <span>View Cookie & Local Storage Policy</span>
+                      </Link>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>

@@ -254,7 +254,7 @@ export default function AgentPanel() {
       } else if (pendingTool.tool === 'delete_note') {
         await noteStore.deleteNote(pendingTool.args.note_id);
         toolRes = true;
-        setTimeout(() => navigate('/'), 100);
+        setTimeout(() => navigate('/app'), 100);
       } else if (pendingTool.tool === 'read_note') {
         toolRes = await noteStore.getNote(pendingTool.args.note_id);
       } else if (pendingTool.tool === 'list_all_notes') {

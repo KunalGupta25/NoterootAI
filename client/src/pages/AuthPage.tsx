@@ -1,15 +1,19 @@
 import { useState } from 'react';
 import type { CSSProperties, FormEvent } from 'react';
-import { Navigate, useNavigate } from 'react-router-dom';
-import { Box, Eye, EyeOff, LogIn, UserPlus } from 'lucide-react';
+import { Navigate, useNavigate, useSearchParams, Link } from 'react-router-dom';
+import { Box, Eye, EyeOff, LogIn, UserPlus, ArrowLeft } from 'lucide-react';
 import { useAuthStore } from '../stores/authStore';
 import { useNoteStore } from '../stores/noteStore';
+import { purgeAccountLocalSession } from '../lib/sessionManager';
 
 export default function AuthPage() {
   const { token, login, signup } = useAuthStore();
   const { initDB } = useNoteStore();
   const navigate = useNavigate();
-  const [mode, setMode] = useState<'login' | 'signup'>('login');
+  const [searchParams] = useSearchParams();
+  const [mode, setMode] = useState<'login' | 'signup'>(() => {
+    return searchParams.get('mode') === 'signup' ? 'signup' : 'login';
+  });
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -18,7 +22,7 @@ export default function AuthPage() {
   const [error, setError] = useState<string | null>(null);
 
   if (token) {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/app" replace />;
   }
 
   const handleSubmit = async (e: FormEvent) => {
@@ -26,13 +30,16 @@ export default function AuthPage() {
     setError(null);
     setLoading(true);
     try {
+      // 1. Purge any previous session/account data from memory and storage
+      purgeAccountLocalSession();
+
       if (mode === 'signup') {
         await signup(name, email, password);
       } else {
         await login(email, password);
       }
       await initDB();
-      navigate('/', { replace: true });
+      navigate('/app', { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Authentication failed');
     } finally {
@@ -57,6 +64,25 @@ export default function AuthPage() {
         padding: '28px',
         boxShadow: '0 18px 60px rgba(0,0,0,0.18)',
       }}>
+        <Link
+          to="/landing"
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '6px',
+            fontSize: '12px',
+            color: 'var(--muted)',
+            textDecoration: 'none',
+            marginBottom: '18px',
+            fontWeight: 500,
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--fg)')}
+          onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--muted)')}
+        >
+          <ArrowLeft size={14} />
+          <span>Back to Product Overview</span>
+        </Link>
+
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '24px' }}>
           <Box size={26} style={{ color: 'var(--accent)' }} />
           <div>

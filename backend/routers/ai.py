@@ -49,6 +49,10 @@ async def suggest(request: SuggestRequest) -> SuggestResponse:
 
 @router.post("/chat")
 async def streaming_chat(request: ChatRequest) -> StreamingResponse:
+    try:
+        get_provider(request.provider, request.api_key, request.custom_base_url)
+    except Exception as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
     return StreamingResponse(chat(request), media_type="text/event-stream")
 
 

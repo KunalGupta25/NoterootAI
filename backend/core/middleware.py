@@ -2,28 +2,39 @@ import logging
 import time
 import uuid
 
-from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 logger = logging.getLogger(__name__)
 
 
-def install_middleware(app: FastAPI) -> None:
-    @app.middleware("http")
-    async def request_context(request: Request, call_next):
-        request_id = request.headers.get("X-Request-Id", str(uuid.uuid4()))
+class RequestContextMiddleware:
+    def __init__(self, app: ASGIApp):
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        request_id = str(uuid.uuid4())
         started_at = time.perf_counter()
-        try:
-            response = await call_next(request)
-        except Exception as e:
-            logger.exception("Unhandled API error", extra={"request_id": request_id, "path": request.url.path})
-            response = JSONResponse(status_code=500, content={"error": "Internal server error", "details": str(e)})
-        response.headers["X-Request-Id"] = request_id
-        logger.info(
-            "%s %s %s %.3fs",
-            request.method,
-            request.url.path,
-            response.status_code,
-            time.perf_counter() - started_at,
-        )
-        return response
+
+        async def send_wrapper(message):
+            if message["type"] == "http.response.start":
+                headers = list(message.get("headers", []))
+                headers.append((b"x-request-id", request_id.encode("latin-1")))
+                message["headers"] = headers
+            elif message["type"] == "http.response.body" and not message.get("more_body", False):
+                logger.info(
+                    "%s %s %.3fs",
+                    scope.get("method"),
+                    scope.get("path"),
+                    time.perf_counter() - started_at,
+                )
+            await send(message)
+
+        await self.app(scope, receive, send_wrapper)
+
+
+def install_middleware(app) -> None:
+    app.add_middleware(RequestContextMiddleware)

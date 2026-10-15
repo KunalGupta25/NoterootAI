@@ -60,6 +60,10 @@ def _validate_custom_url(url: str, environment: str) -> None:
             raise ValueError(f"Custom endpoint host resolves to private/restricted IP: {ip_str}")
 
 
+FALLBACK_COLLECTION = "notes_local_hash_1536"
+_unsupported_embeddings: dict[str, float] = {}
+
+
 class Provider:
     def __init__(self, name: str, api_key: str | None, base_url: str | None = None):
         settings = get_settings()
@@ -113,12 +117,28 @@ class Provider:
         length = math.sqrt(sum(value * value for value in vector))
         return [value / length for value in vector] if length else vector
 
-    async def embed(self, texts: list[str]) -> list[list[float]]:
+    async def embed_with_collection(self, texts: list[str]) -> tuple[list[list[float]], str]:
+        now = time.monotonic()
+        cache_key = f"{self.name}_{self.embedding_model}"
+        if cache_key in _unsupported_embeddings:
+            if now - _unsupported_embeddings[cache_key] < 600.0:
+                return [self._local_embedding(text) for text in texts], FALLBACK_COLLECTION
+            del _unsupported_embeddings[cache_key]
+
         try:
             result = await self.client.embeddings.create(input=texts, model=self.embedding_model)
-            return [item.embedding for item in result.data]
-        except Exception:
-            return [self._local_embedding(text) for text in texts]
+            embeddings = [item.embedding for item in result.data]
+            dim = len(embeddings[0]) if embeddings else 1536
+            coll = self.collection_name(self.embedding_model, dim)
+            return embeddings, coll
+        except Exception as err:
+            logger.info("Embeddings unsupported for %s (%s); negative caching for 10m", self.name, err)
+            _unsupported_embeddings[cache_key] = now
+            return [self._local_embedding(text) for text in texts], FALLBACK_COLLECTION
+
+    async def embed(self, texts: list[str]) -> list[list[float]]:
+        embeddings, _ = await self.embed_with_collection(texts)
+        return embeddings
 
     async def chat(self, messages: list[Message], model: str | None, temperature: float, max_tokens: int) -> AsyncGenerator[str, None]:
         resolved_model = model or self.default_model

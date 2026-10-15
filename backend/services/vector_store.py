@@ -6,6 +6,10 @@ from core.neo4j_driver import neo4j
 class VectorStore:
     """Store note embeddings in Neo4j, alongside the existing note graph."""
 
+    def __init__(self):
+        self._ensured_collections: set[str] = set()
+        self._use_procedure_search: bool = False
+
     @staticmethod
     def _identifier(collection: str, prefix: str) -> str:
         value = re.sub(r"[^A-Za-z0-9]", "_", collection).strip("_")
@@ -20,6 +24,8 @@ class VectorStore:
         return self._identifier(collection, "VectorChunk")
 
     async def ensure_collection(self, collection: str, dimensions: int) -> None:
+        if collection in self._ensured_collections:
+            return
         if neo4j.driver is None:
             raise RuntimeError("Graph database unavailable")
         if not 1 <= dimensions <= 4096:
@@ -34,6 +40,21 @@ class VectorStore:
         )
         async with neo4j.session() as session:
             await session.run(query)
+        self._ensured_collections.add(collection)
+
+    async def get_note_content_hash(self, note_id: str) -> str | None:
+        if neo4j.driver is None:
+            return None
+        try:
+            async with neo4j.session() as session:
+                result = await session.run(
+                    "MATCH (note:Note {id: $note_id}) RETURN note.contentHash AS contentHash",
+                    note_id=note_id,
+                )
+                record = await result.single()
+                return record["contentHash"] if record and "contentHash" in record else None
+        except Exception:
+            return None
 
     async def upsert(
         self,
@@ -43,6 +64,7 @@ class VectorStore:
         tags: list[str],
         documents: list[str],
         embeddings: list[list[float]],
+        content_hash: str | None = None,
     ) -> None:
         if len(documents) != len(embeddings):
             raise ValueError("Each document must have an embedding")
@@ -62,7 +84,8 @@ class VectorStore:
             await session.run(
                 f"""
                 MERGE (note:Note {{id: $note_id}})
-                ON CREATE SET note.title = $title
+                ON CREATE SET note.title = $title, note.contentHash = $content_hash
+                ON MATCH SET note.title = $title, note.contentHash = $content_hash
                 WITH note
                 UNWIND $items AS item
                 MERGE (chunk:NoteChunk:`{label}` {{id: item.id}})
@@ -77,6 +100,7 @@ class VectorStore:
                 title=title,
                 tags=tags,
                 items=items,
+                content_hash=content_hash,
             )
 
     async def search(self, collection: str, embedding: list[float], top_k: int) -> list[dict]:
@@ -87,7 +111,8 @@ class VectorStore:
         index = self._index_name(collection)
         label = self._label(collection)
         await self.ensure_collection(collection, len(embedding))
-        query = f"""
+
+        cypher_search_query = f"""
             MATCH (node:`{label}`)
             SEARCH node IN (
                 VECTOR INDEX `{index}`
@@ -101,9 +126,48 @@ class VectorStore:
                    score
             ORDER BY score DESC
         """
+
+        procedure_search_query = f"""
+            CALL db.index.vector.queryNodes($index, $limit, $embedding)
+            YIELD node, score
+            WHERE node:`{label}`
+            RETURN node[$note_id_property] AS note_id,
+                   node[$title_property] AS title,
+                   node[$content_property] AS content,
+                   node[$tags_property] AS tags,
+                   score
+            ORDER BY score DESC
+        """
+
         async with neo4j.session() as session:
+            if not self._use_procedure_search:
+                try:
+                    result = await session.run(
+                        cypher_search_query,
+                        limit=top_k,
+                        embedding=embedding,
+                        note_id_property="noteId",
+                        title_property="title",
+                        content_property="content",
+                        tags_property="tags",
+                    )
+                    return await result.data()
+                except Exception as err:
+                    err_msg = str(err).lower()
+                    if (
+                        "search" in err_msg
+                        or "syntax" in err_msg
+                        or "vector index" in err_msg
+                        or "unknown clause" in err_msg
+                        or "procedure" in err_msg
+                    ):
+                        self._use_procedure_search = True
+                    else:
+                        raise
+
             result = await session.run(
-                query,
+                procedure_search_query,
+                index=index,
                 limit=top_k,
                 embedding=embedding,
                 note_id_property="noteId",

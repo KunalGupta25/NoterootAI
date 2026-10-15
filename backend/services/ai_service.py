@@ -28,28 +28,37 @@ def split_text(text: str, chunk_size: int = 1000, overlap: int = 200) -> list[st
 
 
 async def embed_note(request: EmbedRequest) -> int:
+    import hashlib
+    content_hash = hashlib.sha256(f"{request.title}\n{request.content}".encode("utf-8")).hexdigest()
+    existing_hash = await vector_store.get_note_content_hash(request.note_id)
+    if existing_hash and existing_hash == content_hash:
+        return 0
+
     provider = get_provider(request.provider, request.api_key, request.custom_base_url)
-    collection = provider.collection_name()
     text = BeautifulSoup(request.content, "html.parser").get_text(separator="\n\n", strip=True)
     chunks = split_text(f"Title: {request.title}\nTags: {', '.join(request.tags)}\n\n{text}")
     if not chunks:
         return 0
+
+    embeddings, collection = await provider.embed_with_collection(chunks)
     await vector_store.upsert(
         collection=collection,
         note_id=request.note_id,
         title=request.title,
         tags=request.tags,
         documents=chunks,
-        embeddings=await provider.embed(chunks),
+        embeddings=embeddings,
+        content_hash=content_hash,
     )
     return len(chunks)
 
 
 async def search_notes(request: SearchRequest) -> SearchResponse:
     provider = get_provider(request.provider, request.api_key, request.custom_base_url)
+    embeddings, collection = await provider.embed_with_collection([request.query])
     result = await vector_store.search(
-        provider.collection_name(),
-        (await provider.embed([request.query]))[0],
+        collection,
+        embeddings[0],
         request.top_k,
     )
     found: list[SearchResult] = []
@@ -160,7 +169,8 @@ async def assist(request: "AssistRequest"):
 
                     v_title = html.escape(item.title, quote=True)
                     v_id = html.escape(item.note_id, quote=True)
-                    vault_tags.append(f'<vault title="{v_title}" id="{v_id}">\n{excerpt}\n</vault>')
+                    safe_excerpt = html.escape(excerpt, quote=False)
+                    vault_tags.append(f'<vault title="{v_title}" id="{v_id}">\n{safe_excerpt}\n</vault>')
                     vault_meta.append({"title": item.title, "id": item.note_id, "score": item.score})
                     if len(vault_tags) >= request.vault.top_k:
                         break
@@ -180,8 +190,9 @@ async def assist(request: "AssistRequest"):
                     for idx, w in enumerate(web_results, 1):
                         w_title = html.escape(w.get("title", ""), quote=True)
                         w_url = html.escape(w.get("url", ""), quote=True)
-                        snippet = w.get("snippet", "")[:300]
-                        web_tags.append(f'<web n="{idx}" url="{w_url}" title="{w_title}">\n{snippet}\n</web>')
+                        snippet = (w.get("snippet", "") or "")[:300]
+                        safe_snippet = html.escape(snippet, quote=False)
+                        web_tags.append(f'<web n="{idx}" url="{w_url}" title="{w_title}">\n{safe_snippet}\n</web>')
                         web_meta.append({"n": idx, "title": w.get("title"), "url": w.get("url")})
                 except Exception as w_err:
                     logging.warning("Web search skipped: %s", w_err)

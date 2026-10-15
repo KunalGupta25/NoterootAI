@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     tavily_api_key: str = ""
     brave_api_key: str = ""
     searxng_url: str = ""
+    web_search_require_auth: bool = False
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

@@ -1,17 +1,21 @@
 import asyncio
+import collections
+import logging
 import time
-from typing import Any
 
 import httpx
 
 from config import get_settings
 
+logger = logging.getLogger(__name__)
+
 
 class WebSearchService:
     def __init__(self):
-        # In-memory cache: query -> (timestamp, list[dict])
-        self._cache: dict[str, tuple[float, list[dict[str, str]]]] = {}
+        # Bounded LRU cache: query -> (timestamp, list[dict]) (max 100 entries, 10 min TTL)
+        self._cache: collections.OrderedDict[str, tuple[float, list[dict[str, str]]]] = collections.OrderedDict()
         self._cache_ttl_seconds = 600.0  # 10 minutes
+        self._max_cache_entries = 100
         # Simple sliding window rate limiter: list of timestamps
         self._request_times: list[float] = []
         self._rate_limit_max_requests = 15
@@ -47,13 +51,15 @@ class WebSearchService:
         if not query:
             return []
 
-        # Check cache
+        # Check LRU cache
         now = time.time()
-        cached = self._cache.get(query)
-        if cached:
-            timestamp, results = cached
+        if query in self._cache:
+            timestamp, results = self._cache[query]
             if now - timestamp < self._cache_ttl_seconds:
+                self._cache.move_to_end(query)
                 return results[:max_results]
+            else:
+                del self._cache[query]
 
         if not self.is_available():
             return []
@@ -73,12 +79,18 @@ class WebSearchService:
                 results = await self._search_brave(query, settings.brave_api_key, max_results)
             elif provider == "searxng":
                 results = await self._search_searxng(query, settings.searxng_url, max_results)
-        except Exception:
-            # Degrade gracefully without crashing request stream
+        except Exception as e:
+            # Never log queries together with API keys
+            logger.warning("Web search provider %s request failed: %s", provider, type(e).__name__)
             return []
 
-        # Store in cache
+        # Store in bounded LRU cache
         if results:
+            expired = [k for k, (ts, _) in self._cache.items() if now - ts >= self._cache_ttl_seconds]
+            for k in expired:
+                del self._cache[k]
+            while len(self._cache) >= self._max_cache_entries:
+                self._cache.popitem(last=False)
             self._cache[query] = (now, results)
 
         return results[:max_results]

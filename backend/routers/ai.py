@@ -1,7 +1,9 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
 from config import get_settings
+from core.rate_limit import limiter
+from core.security import require_user_id
 from providers.factory import get_provider
 from schemas.ai import (
     AgentRequest, AssistRequest, CapabilitiesResponse, ChatRequest, EmbedBulkRequest,
@@ -75,9 +77,16 @@ async def streaming_chat(request: ChatRequest) -> StreamingResponse:
 
 
 @router.post("/assist")
-async def streaming_assist(request: AssistRequest) -> StreamingResponse:
-    _validate_request_provider(request.provider, request.api_key, request.custom_base_url, request.model)
-    return StreamingResponse(assist(request), media_type="text/event-stream", headers=SSE_HEADERS)
+@limiter.limit("30/minute")
+async def streaming_assist(request: Request, body: AssistRequest) -> StreamingResponse:
+    settings = get_settings()
+    if settings.web_search_require_auth and body.web.enabled:
+        try:
+            await require_user_id(request)
+        except HTTPException:
+            raise HTTPException(status_code=401, detail="Authentication required for web search")
+    _validate_request_provider(body.provider, body.api_key, body.custom_base_url, body.model)
+    return StreamingResponse(assist(body), media_type="text/event-stream", headers=SSE_HEADERS)
 
 
 @router.get("/assist/capabilities", response_model=CapabilitiesResponse)

@@ -121,3 +121,34 @@ class ModelsRequest(BaseModel):
 class ModelsResponse(BaseModel):
     provider: str
     models: list[str]
+
+
+class VaultOptions(BaseModel):
+    enabled: bool = False
+    top_k: int = 3
+    exclude_note_id: str | None = None
+    min_score: float = 0.65
+
+
+class WebOptions(BaseModel):
+    enabled: bool = False
+    max_results: int = 3
+
+
+class AssistRequest(BaseModel):
+    messages: list[Message]
+    mode: str = "chat"
+    provider: str = "openai"
+    model: str | None = None
+    api_key: str | None = None
+    custom_base_url: str | None = None
+    vault: VaultOptions = VaultOptions()
+    web: WebOptions = WebOptions()
+    temperature: float = 0.5
+    max_tokens: int = 1024
+
+
+class CapabilitiesResponse(BaseModel):
+    web_available: bool
+    web_provider: str | None = None
+

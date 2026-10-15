@@ -14,6 +14,7 @@ import {
   rankChunks,
   routeIntent,
   buildMessages,
+  getModeParameters,
   CONTEXT_BUDGETS,
   type NoteContextMode,
 } from '../../lib/aiContext';
@@ -44,7 +45,6 @@ export const NoteAIPanel: React.FC<NoteAIPanelProps> = ({
   title,
   onClose,
 }) => {
-  void noteId;
   const { activeProvider, providerKeys, customProviders, getProviderModel } = useSettingsStore();
 
   const [aiTab, setAiTab] = useState<'Chat' | 'Edit'>('Edit');
@@ -344,18 +344,34 @@ export const NoteAIPanel: React.FC<NoteAIPanelProps> = ({
         usedParts.length > 0 ? usedParts.join(' · ') : 'direct model'
       } · ~${(estimatedInputTokens / 1000).toFixed(1)}k tokens in`;
 
-      // Call /chat endpoint (Phase 2 uses /chat with use_vault: false)
-      const res = await fetch(`${AI_URL}/chat`, {
+      const modeParams = getModeParameters(
+        aiTab === 'Edit' ? 'edit' : 'chat',
+        estimatedInputTokens
+      );
+
+      // Call /assist SSE endpoint
+      const res = await fetch(`${AI_URL}/assist`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         signal: controller.signal,
         body: JSON.stringify({
           messages: builtMessages,
+          mode: aiTab === 'Edit' ? 'edit' : 'chat',
           provider: isBuiltinProvider(providerToUse) ? providerToUse : 'custom',
           model: getProviderModel(providerToUse),
           api_key: effectiveKey,
           custom_base_url: custom?.baseUrl,
-          use_vault: false,
+          vault: {
+            enabled: effectiveRoute.vault,
+            top_k: 3,
+            exclude_note_id: noteId,
+          },
+          web: {
+            enabled: effectiveRoute.web,
+            max_results: 3,
+          },
+          temperature: modeParams.temperature,
+          max_tokens: modeParams.max_tokens,
         }),
       });
 
@@ -379,28 +395,62 @@ export const NoteAIPanel: React.FC<NoteAIPanelProps> = ({
       if (res.body) {
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
-        const chunks: string[] = [];
+        let buffer = '';
+        let accumulated = '';
+        let currentMeta = metaText;
 
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
-          const chunk = decoder.decode(value, { stream: true });
-          chunks.push(chunk);
-          const fullText = chunks.join('');
-          setMessages(prev =>
-            prev.map(m => (m.id === assistantMsgId ? { ...m, content: fullText } : m))
-          );
-        }
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
 
-        const finalStreamText = chunks.join('');
-        if (finalStreamText.startsWith('\n\n[Error from')) {
-          setMessages(prev =>
-            prev.map(m =>
-              m.id === assistantMsgId
-                ? { ...m, content: finalStreamText.trim(), isError: true }
-                : m
-            )
-          );
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed.startsWith('data: ')) continue;
+            const dataStr = trimmed.slice(6).trim();
+            if (dataStr === '[DONE]') break;
+
+            try {
+              const event = JSON.parse(dataStr);
+              if (event.type === 'meta') {
+                const s = event.sources || {};
+                const parts: string[] = [];
+                if (noteContentPayload.length > 0) {
+                  parts.push(
+                    effectiveRoute.note === 'selection'
+                      ? 'note (selection)'
+                      : effectiveRoute.note === 'full'
+                      ? 'note (full)'
+                      : `note (${noteContentPayload.length} sections)`
+                  );
+                }
+                if (s.vault?.length) parts.push(`vault (${s.vault.length})`);
+                if (s.web?.length) parts.push(`web (${s.web.length})`);
+                const tokenK = ((event.estimated_input_tokens || estimatedInputTokens) / 1000).toFixed(1);
+                currentMeta = `Used: ${parts.length > 0 ? parts.join(' · ') : 'direct model'} · ~${tokenK}k tokens in`;
+                setMessages(prev =>
+                  prev.map(m => (m.id === assistantMsgId ? { ...m, metaText: currentMeta } : m))
+                );
+              } else if (event.type === 'text') {
+                accumulated += event.content || '';
+                const snapshot = accumulated;
+                setMessages(prev =>
+                  prev.map(m => (m.id === assistantMsgId ? { ...m, content: snapshot } : m))
+                );
+              } else if (event.type === 'error') {
+                const errMsg = event.error || 'AI generation error';
+                setMessages(prev =>
+                  prev.map(m =>
+                    m.id === assistantMsgId ? { ...m, content: errMsg, isError: true } : m
+                  )
+                );
+              }
+            } catch {
+              // Ignore incomplete json fragments
+            }
+          }
         }
       } else {
         const text = await res.text();
@@ -437,6 +487,7 @@ export const NoteAIPanel: React.FC<NoteAIPanelProps> = ({
     compactMd,
     messages,
     aiTab,
+    noteId,
     providerKeys,
     activeProvider,
     customProviders,

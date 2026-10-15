@@ -18,6 +18,13 @@ class Provider:
             raise ValueError(f"{name} API key not provided")
         self.base_url = base_url
         self.default_model = getattr(settings, f"default_chat_model_{name}", settings.default_chat_model_openai)
+        embedding_models = {
+            "openai": "text-embedding-3-small",
+            "openrouter": "openai/text-embedding-3-small",
+            "mistral": "mistral-embed",
+            "gemini": "text-embedding-004",
+        }
+        self.embedding_model = embedding_models.get(self.name, settings.default_embedding_model)
         headers = {}
         if self.name == "openrouter":
             headers = {"HTTP-Referer": "https://noterootai.app", "X-Title": "NoteRootAI"}
@@ -54,6 +61,48 @@ class Provider:
         async for chunk in stream:
             if chunk.choices and chunk.choices[0].delta.content:
                 yield chunk.choices[0].delta.content
+
+    async def chat_stream(
+        self,
+        messages: list[dict],
+        model: str | None,
+        temperature: float,
+        max_tokens: int,
+        extra_body: dict | None = None,
+    ) -> AsyncGenerator[dict, None]:
+        req_kwargs: dict = {
+            "model": model or self.default_model,
+            "messages": messages,
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+            "stream": True,
+        }
+        if extra_body:
+            req_kwargs["extra_body"] = extra_body
+
+        stream = None
+        # Attempt with include_usage enabled
+        try:
+            stream = await self.client.chat.completions.create(
+                **req_kwargs,
+                stream_options={"include_usage": True},
+            )
+        except Exception:
+            # Fall back without stream_options if provider rejects it
+            stream = await self.client.chat.completions.create(**req_kwargs)
+
+        async for chunk in stream:
+            if chunk.choices and chunk.choices[0].delta.content:
+                yield {"type": "text", "content": chunk.choices[0].delta.content}
+            if hasattr(chunk, "usage") and chunk.usage:
+                yield {
+                    "type": "usage",
+                    "usage": {
+                        "prompt_tokens": chunk.usage.prompt_tokens,
+                        "completion_tokens": chunk.usage.completion_tokens,
+                        "total_tokens": chunk.usage.total_tokens,
+                    },
+                }
 
     async def agent(self, messages: list[dict], tools: list[dict], model: str | None, temperature: float, max_tokens: int):
         import json

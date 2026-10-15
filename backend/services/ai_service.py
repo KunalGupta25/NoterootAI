@@ -98,3 +98,140 @@ async def chat(request: ChatRequest):
         import logging
         logging.exception("Chat generation error: %s", err)
         yield f"\n\n[Error from {request.provider}: {str(err)}]"
+
+
+async def assist(request: "AssistRequest"):
+    import html
+    import json
+    import logging
+    from schemas.ai import AssistRequest
+    from services.web_search import web_search_service
+
+    try:
+        provider = get_provider(request.provider, request.api_key, request.custom_base_url)
+
+        # Defensive server-side history cap (limit total historical messages)
+        max_history_turns = 20
+        raw_messages = list(request.messages)
+        if len(raw_messages) > max_history_turns + 2:
+            # Keep first system prompt if present, plus latest turns
+            if raw_messages and raw_messages[0].role == "system":
+                raw_messages = [raw_messages[0]] + raw_messages[-(max_history_turns + 1):]
+            else:
+                raw_messages = raw_messages[-max_history_turns:]
+
+        # Extract user question from the final message
+        final_msg = raw_messages[-1] if raw_messages else None
+        clean_question = ""
+        if final_msg and final_msg.role == "user":
+            clean_question = re.sub(r"<context>[\s\S]*?</context>", "", final_msg.content).strip()
+
+        vault_tags: list[str] = []
+        vault_meta: list[dict] = []
+        if request.vault.enabled and clean_question:
+            try:
+                search_res = await search_notes(
+                    SearchRequest(
+                        query=clean_question[:200],
+                        provider=request.provider,
+                        api_key=request.api_key,
+                        custom_base_url=request.custom_base_url,
+                        top_k=request.vault.top_k + 2,
+                    )
+                )
+                total_vault_chars = 0
+                max_vault_chars = 2400  # ~600 tokens
+                seen_ids: set[str] = set()
+
+                for item in search_res.results:
+                    if request.vault.exclude_note_id and item.note_id == request.vault.exclude_note_id:
+                        continue
+                    if item.score < request.vault.min_score:
+                        continue
+                    if item.note_id in seen_ids:
+                        continue
+                    seen_ids.add(item.note_id)
+
+                    excerpt = (item.excerpt or "").strip()[:400]
+                    if total_vault_chars + len(excerpt) > max_vault_chars:
+                        break
+                    total_vault_chars += len(excerpt)
+
+                    v_title = html.escape(item.title, quote=True)
+                    v_id = html.escape(item.note_id, quote=True)
+                    vault_tags.append(f'<vault title="{v_title}" id="{v_id}">\n{excerpt}\n</vault>')
+                    vault_meta.append({"title": item.title, "id": item.note_id, "score": item.score})
+                    if len(vault_tags) >= request.vault.top_k:
+                        break
+            except Exception as v_err:
+                logging.warning("Vault search skipped: %s", v_err)
+
+        web_tags: list[str] = []
+        web_meta: list[dict] = []
+        extra_body = None
+
+        if request.web.enabled and clean_question:
+            if web_search_service.is_available():
+                try:
+                    web_results = await web_search_service.search(
+                        clean_question[:200], max_results=request.web.max_results
+                    )
+                    for idx, w in enumerate(web_results, 1):
+                        w_title = html.escape(w.get("title", ""), quote=True)
+                        w_url = html.escape(w.get("url", ""), quote=True)
+                        snippet = w.get("snippet", "")[:300]
+                        web_tags.append(f'<web n="{idx}" url="{w_url}" title="{w_title}">\n{snippet}\n</web>')
+                        web_meta.append({"n": idx, "title": w.get("title"), "url": w.get("url")})
+                except Exception as w_err:
+                    logging.warning("Web search skipped: %s", w_err)
+            elif request.provider == "openrouter":
+                # Use OpenRouter's web plugin via extra_body
+                extra_body = {"plugins": [{"id": "web"}]}
+                web_meta.append({"plugin": "openrouter-web"})
+
+        # Inject vault and web tags into ephemeral <context> block in final user message
+        if (vault_tags or web_tags) and final_msg and final_msg.role == "user":
+            new_tags = "\n".join(vault_tags + web_tags)
+            if "<context>" in final_msg.content and "</context>" in final_msg.content:
+                # Insert inside existing context block
+                final_msg.content = final_msg.content.replace("</context>", f"{new_tags}\n</context>")
+            else:
+                # Prepend new context block
+                final_msg.content = f"<context>\n{new_tags}\n</context>\n\n{final_msg.content}"
+
+        # Estimate input tokens
+        estimated_input_tokens = sum(
+            int(len(m.content or "") / 4) + 4 for m in raw_messages
+        )
+
+        # Emit meta event
+        meta_payload = {
+            "type": "meta",
+            "sources": {
+                "vault": vault_meta,
+                "web": web_meta,
+            },
+            "estimated_input_tokens": estimated_input_tokens,
+        }
+        yield f"data: {json.dumps(meta_payload)}\n\n"
+
+        # Stream LLM generation
+        messages_dicts = [{"role": m.role, "content": m.content} for m in raw_messages]
+        async for chunk in provider.chat_stream(
+            messages=messages_dicts,
+            model=request.model,
+            temperature=request.temperature,
+            max_tokens=request.max_tokens,
+            extra_body=extra_body,
+        ):
+            yield f"data: {json.dumps(chunk)}\n\n"
+
+        yield "data: [DONE]\n\n"
+
+    except Exception as err:
+        import json
+        import logging
+        logging.exception("Assist error: %s", err)
+        yield f"data: {json.dumps({'type': 'error', 'error': str(err)})}\n\n"
+        yield "data: [DONE]\n\n"
+

@@ -30,6 +30,10 @@ class Settings(BaseSettings):
     mistral_api_key: str = ""
     groq_api_key: str = ""
     openrouter_api_key: str = ""
+    web_search_provider: str = ""
+    tavily_api_key: str = ""
+    brave_api_key: str = ""
+    searxng_url: str = ""
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

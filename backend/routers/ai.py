@@ -1,14 +1,17 @@
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 
+from config import get_settings
 from providers.factory import get_provider
 from schemas.ai import (
-    AgentRequest, ChatRequest, EmbedBulkRequest, EmbedRequest, EmbedResponse,
-    ModelsRequest, ModelsResponse, SearchRequest, SearchResponse, SuggestRequest, SuggestResponse
+    AgentRequest, AssistRequest, CapabilitiesResponse, ChatRequest, EmbedBulkRequest,
+    EmbedRequest, EmbedResponse, ModelsRequest, ModelsResponse, SearchRequest,
+    SearchResponse, SuggestRequest, SuggestResponse
 )
 from services.agent_service import run_agent
-from services.ai_service import chat, embed_note, search_notes, suggest_notes
+from services.ai_service import assist, chat, embed_note, search_notes, suggest_notes
 from services.vector_store import vector_store
+from services.web_search import web_search_service
 
 router = APIRouter(tags=["ai"])
 
@@ -54,6 +57,24 @@ async def streaming_chat(request: ChatRequest) -> StreamingResponse:
     except Exception as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
     return StreamingResponse(chat(request), media_type="text/event-stream")
+
+
+@router.post("/assist")
+async def streaming_assist(request: AssistRequest) -> StreamingResponse:
+    try:
+        get_provider(request.provider, request.api_key, request.custom_base_url)
+    except Exception as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    return StreamingResponse(assist(request), media_type="text/event-stream")
+
+
+@router.get("/assist/capabilities", response_model=CapabilitiesResponse)
+async def assist_capabilities() -> CapabilitiesResponse:
+    settings = get_settings()
+    return CapabilitiesResponse(
+        web_available=web_search_service.is_available(),
+        web_provider=settings.web_search_provider or None,
+    )
 
 
 @router.post("/agent")

@@ -1094,16 +1094,6 @@ export default function SettingsPage() {
             </div>
           )}
 
-          {/* ── PLUGINS TAB ── */}
-          {activeTab === 'plugins' && (
-            <div>
-              <h2 style={{ fontSize: '16px', fontWeight: 600, margin: '0 0 20px 0', color: 'var(--fg)' }}>
-                Plugin Configurations
-              </h2>
-              <PluginSettingsPanels />
-            </div>
-          )}
-
           {/* ── EDITOR TAB ── */}
           {activeTab === 'editor' && (
             <div>

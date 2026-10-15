@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "NoteRoot AI Google Drive Multi-Account Registry",
+  "description": "Registry tracking isolated account backup folders and manifests under a single Google Drive instance",
+  "version": "1.0.0",
+  "driveRootFolderName": "NoteRoot_AI_Backups",
+  "driveRootFolderId": "drive_folder_noteroot_root",
+  "driveRootUrl": "https://drive.google.com/drive/folders/drive_folder_noteroot_root",
+  "lastUpdated": "2026-10-15T23:45:00.000Z",
+  "syncPolicy": {
+    "autoBackupIntervalMinutes": 60,
+    "conflictResolution": "remote_timestamp_wins",
+    "isolateByAccountId": true
+  },
+  "accounts": {
+    "acc_demo_6620": {
+      "accountId": "acc_demo_6620",
+      "email": "demo@noteroot.ai",
+      "name": "Demo User",
+      "folderName": "NoteRoot_demo_noteroot_ai",
+      "folderId": "1aB2cD3eF4gH5iJ6kL7mN8oP",
+      "folderUrl": "https://drive.google.com/drive/folders/1aB2cD3eF4gH5iJ6kL7mN8oP",
+      "lastBackupAt": "2026-10-15T23:45:00.000Z",
+      "backupFileName": "noteroot_vault_backup_demo.json",
+      "backupFileId": "file_9z8y7x6w5v4u3t2s1r0q",
+      "backupFileUrl": "https://drive.google.com/file/d/file_9z8y7x6w5v4u3t2s1r0q/view",
+      "notesCount": 12,
+      "spaces": ["Research", "Engineering", "Personal", "Other"],
+      "checksumSha256": "8f4e2c8a1b3d5e7f9a0c2e4b6d8f0a2c4e6b8d0a2c4e6b8d0a2c4e6b8d0a2c4e",
+      "status": "synchronized"
+    },
+    "acc_kunal_7719": {
+      "accountId": "acc_kunal_7719",
+      "email": "kunal@noteroot.ai",
+      "name": "Kunal Gupta",
+      "folderName": "NoteRoot_kunal_noteroot_ai",
+      "folderId": "2bC3dE4fG5hI6jK7lM8nO9pQ",
+      "folderUrl": "https://drive.google.com/drive/folders/2bC3dE4fG5hI6jK7lM8nO9pQ",
+      "lastBackupAt": "2026-10-15T23:30:00.000Z",
+      "backupFileName": "noteroot_vault_backup_kunal.json",
+      "backupFileId": "file_8y7x6w5v4u3t2s1r0q9p",
+      "backupFileUrl": "https://drive.google.com/file/d/file_8y7x6w5v4u3t2s1r0q9p/view",
+      "notesCount": 24,
+      "spaces": ["System Architecture", "Graph RAG", "Product Roadmap"],
+      "checksumSha256": "4b6d8f0a2c4e6b8d0a2c4e6b8d0a2c4e8f4e2c8a1b3d5e7f9a0c2e4b6d8f0a2c",
+      "status": "synchronized"
+    }
+  }
+}

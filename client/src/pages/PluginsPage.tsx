@@ -2,8 +2,9 @@ import { useState, useRef } from 'react';
 import { usePluginStore } from '../stores/pluginStore';
 import {
   Puzzle, Search, FileText, Globe,
-  BookOpen, Video, Upload, CheckCircle2, X
+  BookOpen, Video, Upload, CheckCircle2, X, Cloud
 } from 'lucide-react';
+import { DRIVE_CONNECTOR_CODE } from '../plugins/custom/driveConnectorCode';
 
 interface PluginCardData {
   id: string;
@@ -14,9 +15,21 @@ interface PluginCardData {
   iconBg: string;
   iconColor: string;
   icon: React.ReactNode;
+  code?: string;
 }
 
 const MARKET_PLUGINS: PluginCardData[] = [
+  {
+    id: 'drive-connector',
+    name: 'Drive Connector',
+    description: 'Connect Google Drive to auto-backup notes, restore data in new accounts, and show exact Drive location.',
+    author: 'by NoteRoot Team',
+    installs: 'Featured • Official',
+    iconBg: 'rgba(59, 130, 246, 0.12)',
+    iconColor: '#2563eb',
+    icon: <Cloud size={18} />,
+    code: DRIVE_CONNECTOR_CODE,
+  },
   {
     id: 'pdf-reader',
     name: 'PDF Reader',
@@ -78,6 +91,7 @@ export default function PluginsPage() {
         id: plugin.id,
         source: 'community',
         enabled: true,
+        code: plugin.code,
         readme: plugin.description,
       });
     }
@@ -96,15 +110,31 @@ export default function PluginsPage() {
 
   const handleInstallUpload = async () => {
     if (!uploadedFile) return;
-    const pluginId = uploadedFile.name.replace(/\.[^/.]+$/, '').toLowerCase().replace(/[^a-z0-9_-]/g, '-');
-    await installPlugin({
-      id: pluginId,
-      source: 'community',
-      enabled: true,
-      readme: `Installed from local file: ${uploadedFile.name}`,
-    });
-    setUploadStatus('success');
-    setTimeout(() => { setUploadedFile(null); setUploadStatus('idle'); }, 2500);
+    try {
+      const pluginId = uploadedFile.name.replace(/\.[^/.]+$/, '').toLowerCase().replace(/[^a-z0-9_-]/g, '-');
+      let code = '';
+      let readme = `Installed from local file: ${uploadedFile.name}`;
+
+      if (uploadedFile.name.endsWith('.js')) {
+        code = await uploadedFile.text();
+      } else if (uploadedFile.name.endsWith('.json')) {
+        const text = await uploadedFile.text();
+        readme = `Local configuration/manifest:\n\`\`\`json\n${text}\n\`\`\``;
+      }
+
+      await installPlugin({
+        id: pluginId,
+        source: 'community',
+        enabled: true,
+        code,
+        readme,
+      });
+      setUploadStatus('success');
+      setTimeout(() => { setUploadedFile(null); setUploadStatus('idle'); }, 2500);
+    } catch (err) {
+      console.error('Failed to install uploaded plugin:', err);
+      setUploadStatus('error');
+    }
   };
 
   const [githubStatus, setGithubStatus] = useState<'idle' | 'installing' | 'success' | 'error'>('idle');

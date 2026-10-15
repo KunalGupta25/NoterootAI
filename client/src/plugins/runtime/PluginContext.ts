@@ -3,6 +3,7 @@ import { useNoteStore } from '../../stores/noteStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { ThemeEngine } from './ThemeEngine';
 import PluginRuntime from './PluginRuntime';
+import { useAuthStore } from '../../stores/authStore';
 import { AI_URL } from '../../lib/constants';
 import { isBuiltinProvider } from '../../lib/providerConfig';
 
@@ -103,6 +104,17 @@ export class PluginContext {
     },
     openModal: (modalId: string) => {
       window.dispatchEvent(new CustomEvent('OPEN_PLUGIN_MODAL', { detail: { modalId } }));
+    },
+    openUrl: (url: string) => {
+      window.open(url, '_blank', 'noopener,noreferrer');
+    }
+  };
+
+  // User
+  public user = {
+    getCurrentUser: () => {
+      const u = useAuthStore.getState().user;
+      return u ? { id: u.id, email: u.email, name: u.name } : null;
     }
   };
 

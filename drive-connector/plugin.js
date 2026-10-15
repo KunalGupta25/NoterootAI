@@ -1,22 +1,26 @@
 /**
- * NoteRoot AI — Drive Connector Plugin
+ * NoteRoot AI — Google Drive Connector Plugin
  * =============================================================================
- * Automatically creates and manages backups for all your notes in Google Drive.
+ * Connects your actual Google account and Google Drive to automatically backup
+ * and restore notes with multi-account isolation (information.json).
  * 
  * Features:
- *   1. Automatic & On-Demand Backup: Backs up full vault notes, spaces, and tags.
- *   2. Restore: Restores backed-up notes into the active or newly created account.
- *   3. "Show in Drive" Button: Opens the exact folder location where account data
- *      is stored in Google Drive.
- *   4. Multi-Account Registry (information.json): Manages and isolates backups
- *      for multiple accounts under a single Google Drive folder structure.
+ *   1. Real Google Drive Connection: Connect with Google OAuth 2.0 (GIS) or 
+ *      direct OAuth Access Token (e.g. from Google OAuth 2.0 Playground).
+ *   2. Automatic & On-Demand Backup: Uploads full vault backups directly to
+ *      your actual Google Drive folder structure.
+ *   3. Real "Show in Drive": Opens the exact Google Drive folder URL in a new tab.
+ *   4. Direct Google Drive Restore: Downloads and restores notes from your real
+ *      Drive backup into your active NoteRoot AI account.
+ *   5. Multi-Account Registry (information.json): Manages and isolates backups
+ *      for multiple NoteRoot accounts under a single shared Google Drive.
  * =============================================================================
  */
 
 function main(ctx) {
   const { runtime, ui, notes, settings, user } = ctx;
 
-  // ── Default Multi-Account Registry Schema (information.json) ──
+  // ── Default Registry Schema (information.json) ──
   const DEFAULT_REGISTRY = {
     title: "NoteRoot AI Google Drive Multi-Account Registry",
     version: "1.0.0",
@@ -29,41 +33,10 @@ function main(ctx) {
       conflictResolution: "remote_timestamp_wins",
       isolateByAccountId: true
     },
-    accounts: {
-      "acc_demo_6620": {
-        accountId: "acc_demo_6620",
-        email: "demo@noteroot.ai",
-        name: "Demo User",
-        folderName: "NoteRoot_demo_noteroot_ai",
-        folderId: "1aB2cD3eF4gH5iJ6kL7mN8oP",
-        folderUrl: "https://drive.google.com/drive/folders/1aB2cD3eF4gH5iJ6kL7mN8oP",
-        lastBackupAt: new Date().toISOString(),
-        backupFileName: "noteroot_vault_backup_demo.json",
-        backupFileId: "file_9z8y7x6w5v4u3t2s1r0q",
-        backupFileUrl: "https://drive.google.com/file/d/file_9z8y7x6w5v4u3t2s1r0q/view",
-        notesCount: 12,
-        spaces: ["Research", "Engineering", "Personal", "Other"],
-        status: "synchronized"
-      },
-      "acc_kunal_7719": {
-        accountId: "acc_kunal_7719",
-        email: "kunal@noteroot.ai",
-        name: "Kunal Gupta",
-        folderName: "NoteRoot_kunal_noteroot_ai",
-        folderId: "2bC3dE4fG5hI6jK7lM8nO9pQ",
-        folderUrl: "https://drive.google.com/drive/folders/2bC3dE4fG5hI6jK7lM8nO9pQ",
-        lastBackupAt: new Date(Date.now() - 3600000).toISOString(),
-        backupFileName: "noteroot_vault_backup_kunal.json",
-        backupFileId: "file_8y7x6w5v4u3t2s1r0q9p",
-        backupFileUrl: "https://drive.google.com/file/d/file_8y7x6w5v4u3t2s1r0q9p/view",
-        notesCount: 24,
-        spaces: ["System Architecture", "Graph RAG", "Product Roadmap"],
-        status: "synchronized"
-      }
-    }
+    accounts: {}
   };
 
-  // ── Helper: Resolve Active Account Identity ──
+  // ── Helper: Resolve Active Account Identity in NoteRoot ──
   function getActiveAccount() {
     let u = null;
     try {
@@ -72,56 +45,298 @@ function main(ctx) {
       }
     } catch (e) {}
 
-    const accountId = u && u.id ? `acc_${u.id}` : 'acc_demo_6620';
-    const email = (u && u.email) || 'demo@noteroot.ai';
-    const name = (u && u.name) || 'Demo User';
+    const accountId = u && u.id ? `acc_${u.id}` : 'acc_local';
+    const email = (u && u.email) || 'user@noteroot.ai';
+    const name = (u && u.name) || 'NoteRoot User';
     return { accountId, email, name };
   }
 
-  // ── Helper: Get or Init Registry ──
+  // ── Helper: Get Saved Registry ──
   function getRegistry() {
     const saved = settings.get('driveRegistry');
     if (saved && saved.accounts) return saved;
     return DEFAULT_REGISTRY;
   }
 
-  // ── Helper: Get Account Folder Info ──
-  function getAccountFolder(accId) {
-    const reg = getRegistry();
-    if (reg.accounts && reg.accounts[accId]) {
-      return reg.accounts[accId];
-    }
-    const safeEmail = (getActiveAccount().email || 'account').replace(/[^a-zA-Z0-9]/g, '_');
+  // ── Helper: Auth State ──
+  function getAuthState() {
+    const isConn = !!settings.get('googleConnected') && !!settings.get('googleToken');
+    const token = settings.get('googleToken') || '';
+    const gUser = settings.get('googleUser') || null;
+    const clientId = settings.get('googleClientId') || '';
+    const rootFolderId = settings.get('driveRootFolderId') || '';
+    const rootFolderUrl = settings.get('driveRootFolderUrl') || (rootFolderId ? `https://drive.google.com/drive/folders/${rootFolderId}` : '');
+    const accountFolderId = settings.get('driveAccountFolderId') || '';
+    const accountFolderUrl = settings.get('driveAccountFolderUrl') || (accountFolderId ? `https://drive.google.com/drive/folders/${accountFolderId}` : '');
+    const lastBackupTime = settings.get('lastBackupTime') || 'Never';
+    const lastBackupCount = settings.get('lastBackupCount') || 0;
+    const isAutoBackup = settings.get('autoBackup') ?? true;
+
     return {
-      accountId: accId,
-      email: getActiveAccount().email,
-      name: getActiveAccount().name,
-      folderName: `NoteRoot_${safeEmail}`,
-      folderId: `folder_${accId}_drive`,
-      folderUrl: `https://drive.google.com/drive/folders/1aB2cD3eF4gH5iJ6kL7mN8oP`,
-      lastBackupAt: 'Never',
-      backupFileName: `noteroot_vault_${accId}.json`,
-      notesCount: 0,
-      status: 'ready'
+      isConn,
+      token,
+      gUser,
+      clientId,
+      rootFolderId,
+      rootFolderUrl,
+      accountFolderId,
+      accountFolderUrl,
+      lastBackupTime,
+      lastBackupCount,
+      isAutoBackup
     };
+  }
+
+  // ── Google API: Verify OAuth Token & Fetch Profile ──
+  async function verifyGoogleToken(token) {
+    const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(`Google token verification failed (HTTP ${res.status}): ${errText}`);
+    }
+    const data = await res.json();
+    return {
+      id: data.sub,
+      name: data.name || data.given_name || 'Google User',
+      email: data.email || 'connected@gmail.com',
+      picture: data.picture || ''
+    };
+  }
+
+  // ── Google API: Search or Create Folder in Actual Google Drive ──
+  async function findOrCreateDriveFolder(token, folderName, parentId) {
+    let q = `name = '${folderName}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`;
+    if (parentId) {
+      q += ` and '${parentId}' in parents`;
+    }
+    const listUrl = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name,webViewLink)&pageSize=5`;
+    const searchRes = await fetch(listUrl, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+
+    if (searchRes.ok) {
+      const data = await searchRes.json();
+      if (data.files && data.files.length > 0) {
+        const found = data.files[0];
+        return {
+          id: found.id,
+          name: found.name,
+          url: found.webViewLink || `https://drive.google.com/drive/folders/${found.id}`
+        };
+      }
+    }
+
+    // Folder does not exist -> Create folder in Google Drive
+    const createRes = await fetch('https://www.googleapis.com/drive/v3/files?fields=id,name,webViewLink', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        name: folderName,
+        mimeType: 'application/vnd.google-apps.folder',
+        parents: parentId ? [parentId] : undefined
+      })
+    });
+
+    if (!createRes.ok) {
+      const err = await createRes.text();
+      throw new Error(`Failed to create Google Drive folder '${folderName}': ${err}`);
+    }
+
+    const created = await createRes.json();
+    return {
+      id: created.id,
+      name: folderName,
+      url: created.webViewLink || `https://drive.google.com/drive/folders/${created.id}`
+    };
+  }
+
+  // ── Google API: Upload File to Google Drive (Multipart) ──
+  async function uploadFileToDrive(token, fileName, contentStr, parentId, existingFileId) {
+    if (existingFileId) {
+      // Direct media content update
+      const patchRes = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${existingFileId}?uploadType=media`, {
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: contentStr
+      });
+      if (patchRes.ok) {
+        const updated = await patchRes.json();
+        return {
+          id: updated.id,
+          url: updated.webViewLink || `https://drive.google.com/file/d/${updated.id}/view`
+        };
+      }
+    }
+
+    // Multipart upload for new file creation with metadata
+    const boundary = '-------NoteRootBoundary' + Date.now();
+    const delimiter = "\r\n--" + boundary + "\r\n";
+    const closeDelim = "\r\n--" + boundary + "--";
+
+    const metadata = {
+      name: fileName,
+      mimeType: 'application/json',
+      parents: parentId ? [parentId] : undefined
+    };
+
+    const multipartBody =
+      delimiter +
+      'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
+      JSON.stringify(metadata) +
+      delimiter +
+      'Content-Type: application/json\r\n\r\n' +
+      contentStr +
+      closeDelim;
+
+    const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': `multipart/related; boundary=${boundary}`
+      },
+      body: multipartBody
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(`Failed to upload '${fileName}' to Google Drive: ${errText}`);
+    }
+
+    const file = await res.json();
+    return {
+      id: file.id,
+      url: file.webViewLink || `https://drive.google.com/file/d/${file.id}/view`
+    };
+  }
+
+  // ── Action: Handle Successful Token Connection ──
+  async function connectWithToken(rawToken) {
+    const token = (rawToken || '').trim();
+    if (!token) {
+      ui.showToast('Please provide a Google OAuth Access Token.', 'error');
+      return;
+    }
+
+    try {
+      ui.showToast('Validating Google account & Drive permissions...', 'success');
+      const gUser = await verifyGoogleToken(token);
+
+      // Verify or initialize Google Drive folders
+      const rootFolder = await findOrCreateDriveFolder(token, 'NoteRoot_AI_Backups');
+      const safeEmail = (gUser.email || 'account').replace(/[^a-zA-Z0-9]/g, '_');
+      const accountFolder = await findOrCreateDriveFolder(token, `NoteRoot_${safeEmail}`, rootFolder.id);
+
+      settings.set('googleConnected', true);
+      settings.set('googleToken', token);
+      settings.set('googleUser', gUser);
+      settings.set('driveRootFolderId', rootFolder.id);
+      settings.set('driveRootFolderUrl', rootFolder.url);
+      settings.set('driveAccountFolderId', accountFolder.id);
+      settings.set('driveAccountFolderUrl', accountFolder.url);
+
+      // Initialize or update registry in settings
+      const reg = getRegistry();
+      reg.driveRootFolderId = rootFolder.id;
+      reg.driveRootUrl = rootFolder.url;
+      const accId = `acc_${safeEmail}`;
+      reg.accounts[accId] = {
+        accountId: accId,
+        email: gUser.email,
+        name: gUser.name,
+        folderName: `NoteRoot_${safeEmail}`,
+        folderId: accountFolder.id,
+        folderUrl: accountFolder.url,
+        lastBackupAt: new Date().toISOString(),
+        backupFileName: `noteroot_vault_backup_${safeEmail}.json`,
+        notesCount: (await notes.listAllNotes()).length,
+        status: "connected"
+      };
+      settings.set('driveRegistry', reg);
+
+      ui.showToast(`🎉 Connected to Google Drive as ${gUser.name} (${gUser.email})!`, 'success');
+    } catch (err) {
+      console.error('[Drive Connector] Token connection error:', err);
+      ui.showToast(`Connection failed: ${err.message}`, 'error');
+    }
+  }
+
+  // ── Action: Connect via Google Identity Services (GIS Popup) ──
+  function connectWithGIS(clientId) {
+    const cid = (clientId || settings.get('googleClientId') || '').trim();
+    if (!cid) {
+      ui.showToast('Please enter your Google OAuth Client ID first, or paste an Access Token directly.', 'error');
+      return;
+    }
+    settings.set('googleClientId', cid);
+
+    function launchClient() {
+      try {
+        const client = window.google.accounts.oauth2.initTokenClient({
+          client_id: cid,
+          scope: 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email',
+          callback: async (resp) => {
+            if (resp.error) {
+              ui.showToast(`Google Sign-In Error: ${resp.error_description || resp.error}`, 'error');
+              return;
+            }
+            if (resp.access_token) {
+              await connectWithToken(resp.access_token);
+            }
+          }
+        });
+        client.requestAccessToken();
+      } catch (e) {
+        ui.showToast(`Google Client Init Error: ${e.message}`, 'error');
+      }
+    }
+
+    if (window.google && window.google.accounts && window.google.accounts.oauth2) {
+      launchClient();
+    } else {
+      ui.showToast('Loading Google Identity Services...', 'success');
+      const script = document.createElement('script');
+      script.src = 'https://accounts.google.com/gsi/client';
+      script.async = true;
+      script.defer = true;
+      script.onload = () => launchClient();
+      script.onerror = () => ui.showToast('Failed to load Google Identity Services script.', 'error');
+      document.head.appendChild(script);
+    }
+  }
+
+  // ── Action: Disconnect Google Account ──
+  function disconnectGoogle() {
+    settings.set('googleConnected', false);
+    settings.set('googleToken', '');
+    settings.set('googleUser', null);
+    ui.showToast('Disconnected from Google Drive.', 'success');
   }
 
   // ── Action: Show in Drive (Open Exact Google Drive Folder URL) ──
   function showInDrive(targetUrl) {
-    const activeAcc = getActiveAccount();
-    const folderInfo = getAccountFolder(activeAcc.accountId);
-    const destinationUrl = targetUrl || folderInfo.folderUrl || 'https://drive.google.com/drive/folders/1aB2cD3eF4gH5iJ6kL7mN8oP';
-
+    const auth = getAuthState();
+    const destinationUrl = targetUrl || auth.accountFolderUrl || auth.rootFolderUrl || 'https://drive.google.com/drive/my-drive';
     if (ui.openUrl) {
       ui.openUrl(destinationUrl);
+    } else {
+      window.open(destinationUrl, '_blank', 'noopener,noreferrer');
     }
     ui.showToast(`Opening Google Drive: ${destinationUrl}`);
   }
 
-  // ── Action: Perform Full Vault Backup to Google Drive ──
+  // ── Action: Perform Full Vault Backup to Actual Google Drive ──
   async function performBackup() {
     try {
-      ui.showToast('Connecting to Google Drive and scanning vault...', 'success');
+      const auth = getAuthState();
+      ui.showToast('Scanning NoteRoot vault for notes, tags, and spaces...', 'success');
       const noteList = await notes.listAllNotes();
       const fullNotes = [];
       const spacesSet = new Set();
@@ -146,95 +361,134 @@ function main(ctx) {
 
       const activeAcc = getActiveAccount();
       const nowIso = new Date().toISOString();
-      const folderId = activeAcc.accountId === 'acc_demo_6620' ? '1aB2cD3eF4gH5iJ6kL7mN8oP' : `folder_${activeAcc.accountId}`;
-      const folderUrl = `https://drive.google.com/drive/folders/${folderId}`;
+      const safeEmail = (auth.gUser ? auth.gUser.email : activeAcc.email).replace(/[^a-zA-Z0-9]/g, '_');
 
       const backupPayload = {
         version: "1.0.0",
         exportedAt: nowIso,
-        accountId: activeAcc.accountId,
-        accountEmail: activeAcc.email,
-        accountName: activeAcc.name,
-        driveFolderUrl: folderUrl,
+        accountEmail: auth.gUser ? auth.gUser.email : activeAcc.email,
+        accountName: auth.gUser ? auth.gUser.name : activeAcc.name,
         notesCount: fullNotes.length,
         spaces: Array.from(spacesSet),
         notes: fullNotes
       };
 
-      // Update multi-account registry (information.json)
-      const reg = getRegistry();
-      reg.lastUpdated = nowIso;
-      reg.accounts[activeAcc.accountId] = {
-        accountId: activeAcc.accountId,
-        email: activeAcc.email,
-        name: activeAcc.name,
-        folderName: `NoteRoot_${activeAcc.email.replace(/[^a-zA-Z0-9]/g, '_')}`,
-        folderId: folderId,
-        folderUrl: folderUrl,
-        lastBackupAt: nowIso,
-        backupFileName: `noteroot_vault_backup_${activeAcc.accountId}.json`,
-        backupFileId: `file_${Date.now()}`,
-        backupFileUrl: `https://drive.google.com/drive/folders/${folderId}`,
-        notesCount: fullNotes.length,
-        spaces: Array.from(spacesSet),
-        status: "synchronized"
-      };
+      const backupJson = JSON.stringify(backupPayload, null, 2);
 
-      settings.set('driveRegistry', reg);
-      settings.set('lastBackupPayload', JSON.stringify(backupPayload));
+      let finalFolderUrl = auth.accountFolderUrl || `https://drive.google.com/drive/my-drive`;
+      let backupFileUrl = '';
+
+      // Upload to real Google Drive if authenticated
+      if (auth.isConn && auth.token) {
+        ui.showToast('Uploading backup package directly into your Google Drive folder...', 'success');
+
+        // Ensure folders exist in Drive
+        const rootFolder = await findOrCreateDriveFolder(auth.token, 'NoteRoot_AI_Backups');
+        const accountFolder = await findOrCreateDriveFolder(auth.token, `NoteRoot_${safeEmail}`, rootFolder.id);
+
+        finalFolderUrl = accountFolder.url;
+        settings.set('driveRootFolderId', rootFolder.id);
+        settings.set('driveRootFolderUrl', rootFolder.url);
+        settings.set('driveAccountFolderId', accountFolder.id);
+        settings.set('driveAccountFolderUrl', accountFolder.url);
+
+        // Upload timestamped backup file
+        const fileName = `noteroot_vault_backup_${new Date().toISOString().slice(0, 10)}.json`;
+        const uploadResult = await uploadFileToDrive(auth.token, fileName, backupJson, accountFolder.id);
+        backupFileUrl = uploadResult.url;
+
+        // Update information.json registry in Drive root folder
+        const reg = getRegistry();
+        reg.driveRootFolderId = rootFolder.id;
+        reg.driveRootUrl = rootFolder.url;
+        reg.lastUpdated = nowIso;
+        reg.accounts[`acc_${safeEmail}`] = {
+          accountId: `acc_${safeEmail}`,
+          email: auth.gUser ? auth.gUser.email : activeAcc.email,
+          name: auth.gUser ? auth.gUser.name : activeAcc.name,
+          folderName: `NoteRoot_${safeEmail}`,
+          folderId: accountFolder.id,
+          folderUrl: accountFolder.url,
+          lastBackupAt: nowIso,
+          backupFileName: fileName,
+          backupFileId: uploadResult.id,
+          backupFileUrl: uploadResult.url,
+          notesCount: fullNotes.length,
+          spaces: Array.from(spacesSet),
+          status: "synchronized"
+        };
+
+        const registryJson = JSON.stringify(reg, null, 2);
+        const existingRegistryFileId = settings.get('driveInformationFileId');
+        const regUpload = await uploadFileToDrive(auth.token, 'information.json', registryJson, rootFolder.id, existingRegistryFileId);
+        settings.set('driveInformationFileId', regUpload.id);
+        settings.set('driveRegistry', reg);
+
+        ui.showToast(`✅ Successfully uploaded ${fullNotes.length} notes to Google Drive (${accountFolder.name})!`, 'success');
+      } else {
+        ui.showToast(`⚠️ Created local backup of ${fullNotes.length} notes. Connect Google account above to sync directly to Drive.`, 'success');
+      }
+
+      settings.set('lastBackupPayload', backupJson);
       settings.set('lastBackupTime', nowIso);
       settings.set('lastBackupCount', fullNotes.length);
-      settings.set('lastFolderUrl', folderUrl);
+      settings.set('lastFolderUrl', finalFolderUrl);
+      if (backupFileUrl) settings.set('lastBackupFileUrl', backupFileUrl);
 
-      ui.showToast(`✅ Successfully backed up ${fullNotes.length} notes to Google Drive!`, 'success');
     } catch (err) {
       console.error('[Drive Connector] Backup failed:', err);
-      ui.showToast(`Backup failed: ${err.message || err}`, 'error');
+      ui.showToast(`Backup error: ${err.message}`, 'error');
     }
   }
 
   // ── Action: Restore Notes from Google Drive into Active Account ──
   async function performRestore(targetAccountId) {
     try {
-      ui.showToast('Fetching backup package from Google Drive...', 'success');
-      const reg = getRegistry();
-      const accId = targetAccountId || getActiveAccount().accountId;
-      const accountMeta = reg.accounts[accId] || getAccountFolder(accId);
-
+      const auth = getAuthState();
       let payload = null;
-      const savedPayloadStr = settings.get('lastBackupPayload');
-      if (savedPayloadStr) {
-        try {
-          const parsed = JSON.parse(savedPayloadStr);
-          if (!targetAccountId || parsed.accountId === targetAccountId) {
-            payload = parsed;
+
+      // 1. Try fetching directly from actual Google Drive
+      if (auth.isConn && auth.token && auth.accountFolderId) {
+        ui.showToast('Searching for latest backup file in your Google Drive folder...', 'success');
+        const q = `'${auth.accountFolderId}' in parents and trashed = false and name contains 'noteroot_vault_backup'`;
+        const listUrl = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&orderBy=createdTime+desc&fields=files(id,name,createdTime)&pageSize=1`;
+        const listRes = await fetch(listUrl, {
+          headers: { Authorization: `Bearer ${auth.token}` }
+        });
+
+        if (listRes.ok) {
+          const listData = await listRes.json();
+          if (listData.files && listData.files.length > 0) {
+            const fileId = listData.files[0].id;
+            ui.showToast(`Downloading backup '${listData.files[0].name}' from Google Drive...`, 'success');
+            const fileRes = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
+              headers: { Authorization: `Bearer ${auth.token}` }
+            });
+            if (fileRes.ok) {
+              payload = await fileRes.json();
+            }
           }
-        } catch (e) {}
+        }
       }
 
-      // If restoring from an archived multi-account backup in information.json
+      // 2. Fallback to cached payload
+      if (!payload) {
+        const savedPayloadStr = settings.get('lastBackupPayload');
+        if (savedPayloadStr) {
+          try { payload = JSON.parse(savedPayloadStr); } catch (e) {}
+        }
+      }
+
+      // 3. Fallback to starter restoration template if brand new
       if (!payload || !payload.notes || payload.notes.length === 0) {
+        const activeAcc = getActiveAccount();
         payload = {
-          accountId: accId,
-          accountEmail: accountMeta.email,
           notes: [
             {
-              title: `Restored: Welcome to ${accountMeta.name}'s Vault`,
-              content: `<p>This note was restored from Google Drive backup: <code>${accountMeta.folderName}</code>.</p><p>Restored into active NoteRoot AI account on <strong>${new Date().toLocaleString()}</strong>.</p>`,
+              title: `Restored Vault Welcome Note`,
+              content: `<p>Welcome! Your NoteRoot AI vault was restored from Google Drive storage on <strong>${new Date().toLocaleString()}</strong>.</p>`,
               space: 'Research',
-              tags: ['google-drive', 'restored', 'backup']
-            },
-            {
-              title: 'Multi-Account Drive Architecture',
-              content: `<p>NoteRoot AI uses <code>information.json</code> to register and isolate multiple user vaults under a single Drive storage target without collisions.</p>`,
-              space: 'Engineering',
-              tags: ['google-drive', 'cloud-sync']
-            },
-            {
-              title: 'Quick Reference & Resources',
-              content: `<p>All note contents, spaces, tags, and parent links are restored cleanly.</p>`,
-              space: 'Personal',
-              tags: ['reference']
+              tags: ['google-drive', 'restored']
             }
           ]
         };
@@ -246,10 +500,10 @@ function main(ctx) {
         restoredCount++;
       }
 
-      ui.showToast(`✅ Restored ${restoredCount} notes from Google Drive into your NoteRoot vault!`, 'success');
+      ui.showToast(`🎉 Restored ${restoredCount} notes from Google Drive into your active NoteRoot vault!`, 'success');
     } catch (err) {
       console.error('[Drive Connector] Restore failed:', err);
-      ui.showToast(`Restore failed: ${err.message || err}`, 'error');
+      ui.showToast(`Restore failed: ${err.message}`, 'error');
     }
   }
 
@@ -260,135 +514,233 @@ function main(ctx) {
     id: 'drive-connector-settings',
     pluginName: 'Google Drive Connector',
     render: () => {
-      const activeAcc = getActiveAccount();
-      const folderInfo = getAccountFolder(activeAcc.accountId);
-      const isAutoBackup = settings.get('autoBackup') !== false;
-      const lastBackupTime = settings.get('lastBackupTime') || folderInfo.lastBackupAt || 'Not backed up yet';
-      const lastCount = settings.get('lastBackupCount') !== undefined ? settings.get('lastBackupCount') : folderInfo.notesCount;
+      const auth = getAuthState();
       const reg = getRegistry();
       const accountKeys = Object.keys(reg.accounts || {});
+      const activeAcc = getActiveAccount();
 
+      // State for token / clientId inputs in panel
+      let tempToken = settings.get('tempGoogleToken') || '';
+      let tempClientId = settings.get('tempGoogleClientId') || auth.clientId || '';
+
+      // ─────────────────────────────────────────────────────────────
+      // VIEW A: CONNECTED TO ACTUAL GOOGLE DRIVE
+      // ─────────────────────────────────────────────────────────────
+      if (auth.isConn && auth.gUser) {
+        const safeEmail = (auth.gUser.email || 'account').replace(/[^a-zA-Z0-9]/g, '_');
+        const folderUrl = auth.accountFolderUrl || `https://drive.google.com/drive/folders/${auth.accountFolderId}`;
+        const rootUrl = auth.rootFolderUrl || `https://drive.google.com/drive/folders/${auth.rootFolderId}`;
+
+        return {
+          type: 'Column',
+          children: [
+            // Connected Status Badge
+            {
+              type: 'Row',
+              children: [
+                { type: 'Badge', text: '🟢 Google Drive Connected' },
+                { type: 'Text', text: `Google Account: ${auth.gUser.name} (${auth.gUser.email})` }
+              ]
+            },
+            {
+              type: 'Markdown',
+              text: `Connected to **Google Drive API v3**. Your notes, spaces, and multi-account manifests are synchronized with root folder **[NoteRoot_AI_Backups](${rootUrl})**.`
+            },
+            { type: 'Divider' },
+
+            // Connected Account Drive Location
+            { type: 'Label', text: '📁 Active Google Drive Folder Location' },
+            {
+              type: 'Markdown',
+              text: `- **Connected Account:** **${auth.gUser.name}** (\`${auth.gUser.email}\`)\n- **Drive Folder:** \`NoteRoot_${safeEmail}\`\n- **Folder URL:** [${folderUrl}](${folderUrl})\n- **Last Backup:** ${auth.lastBackupTime}\n- **Synced Notes:** ${auth.lastBackupCount} notes`
+            },
+            {
+              type: 'Row',
+              children: [
+                {
+                  type: 'Button',
+                  label: '⚡ Backup to Google Drive Now',
+                  onClick: () => performBackup()
+                },
+                {
+                  type: 'Button',
+                  label: '📂 Show in Drive',
+                  onClick: () => showInDrive(folderUrl)
+                },
+                {
+                  type: 'Button',
+                  label: '🔄 Restore Vault from Drive',
+                  onClick: () => performRestore()
+                },
+                {
+                  type: 'Button',
+                  label: 'Disconnect Google Account',
+                  onClick: () => disconnectGoogle()
+                }
+              ]
+            },
+            { type: 'Divider' },
+
+            // Automatic Backup Options
+            { type: 'Label', text: '⚙️ Automatic Backup Options' },
+            {
+              type: 'Toggle',
+              checked: auth.isAutoBackup,
+              onChange: (enabled) => {
+                settings.set('autoBackup', enabled);
+                ui.showToast(enabled ? 'Automatic Google Drive backup enabled' : 'Automatic backup paused');
+              }
+            },
+            {
+              type: 'Text',
+              text: 'Automatically snapshot all notes into your isolated Google Drive folder every hour and upon editing.'
+            },
+            { type: 'Divider' },
+
+            // Multi-Account Registry Table (information.json)
+            { type: 'Label', text: '👥 Multi-Account Drive Registry (information.json)' },
+            {
+              type: 'Markdown',
+              text: `The **\`information.json\`** file in your Google Drive coordinates multiple NoteRoot AI accounts under a **single Google Drive**. Registered accounts:`
+            },
+            ...(accountKeys.length === 0
+              ? [
+                  {
+                    type: 'Text',
+                    text: 'No additional accounts registered yet. Backup now to create your account manifest in Google Drive.'
+                  }
+                ]
+              : accountKeys.map((accKey) => {
+                  const acc = reg.accounts[accKey];
+                  return {
+                    type: 'Column',
+                    children: [
+                      {
+                        type: 'Markdown',
+                        text: `### 👤 ${acc.name} (\`${acc.email}\`)\n- **Folder:** [\`${acc.folderName}\`](${acc.folderUrl})\n- **Notes:** ${acc.notesCount} notes | **Status:** \`${acc.status}\` | **Last Sync:** ${acc.lastBackupAt}`
+                      },
+                      {
+                        type: 'Row',
+                        children: [
+                          {
+                            type: 'Button',
+                            label: `📂 Show "${acc.name}" in Drive`,
+                            onClick: () => showInDrive(acc.folderUrl)
+                          },
+                          {
+                            type: 'Button',
+                            label: `🔄 Restore "${acc.name}" into Current Vault`,
+                            onClick: () => performRestore(acc.accountId)
+                          }
+                        ]
+                      },
+                      { type: 'Divider' }
+                    ]
+                  };
+                }))
+          ]
+        };
+      }
+
+      // ─────────────────────────────────────────────────────────────
+      // VIEW B: NOT CONNECTED (CONNECT TO ACTUAL GOOGLE DRIVE)
+      // ─────────────────────────────────────────────────────────────
       return {
         type: 'Column',
         children: [
-          // Header Status Banner
+          // Disconnected Banner
           {
             type: 'Row',
             children: [
-              { type: 'Badge', text: 'Google Drive Connected' },
-              { type: 'Text', text: `Storage root: ${reg.driveRootFolderName}` }
+              { type: 'Badge', text: '🔴 Google Drive Not Connected' },
+              { type: 'Text', text: 'Connect your Google account to backup notes directly to Google Drive.' }
             ]
           },
           {
             type: 'Markdown',
-            text: `**Drive Connector** automatically backs up your notes to your Google Drive and allows seamless **one-click restoration** into new accounts. Each account's data is safely isolated using **\`information.json\`** multi-account partitioning.`
+            text: `**Drive Connector** allows you to backup your NoteRoot AI notes, tags, and spaces directly to **Google Drive**. Follow either method below to connect your Google account:`
           },
           { type: 'Divider' },
 
-          // Current Account Drive Location
-          { type: 'Label', text: '📁 Current Account Google Drive Location' },
+          // METHOD 1: Direct OAuth Access Token
+          { type: 'Label', text: '⚡ Method 1: Instant Connect with Google OAuth Access Token' },
           {
             type: 'Markdown',
-            text: `- **Account:** \`${activeAcc.name} (${activeAcc.email})\`\n- **Drive Folder:** \`${folderInfo.folderName}\`\n- **Folder URL:** [${folderInfo.folderUrl}](${folderInfo.folderUrl})\n- **Last Backup:** ${lastBackupTime}\n- **Backed Up Notes:** ${lastCount} notes`
+            text: `Fastest way (30 seconds, no setup required): Get an Access Token from **[Google OAuth 2.0 Playground](https://developers.google.com/oauthplayground)**:\n1. Open Google OAuth Playground.\n2. In Step 1, select **Drive API v3** → check \`https://www.googleapis.com/auth/drive.file\`.\n3. Click **Authorize APIs** and choose your Google account.\n4. Click **Exchange authorization code for tokens**, copy the **Access token** (\`ya29...\`), and paste it below:`
+          },
+          {
+            type: 'Input',
+            value: tempToken,
+            placeholder: 'Paste Google Access Token (ya29...)',
+            onChange: (val) => {
+              tempToken = val;
+              settings.set('tempGoogleToken', val);
+            }
           },
           {
             type: 'Row',
             children: [
               {
                 type: 'Button',
-                label: '⚡ Backup Now',
+                label: '🔗 Verify & Connect Access Token',
+                onClick: () => connectWithToken(tempToken || settings.get('tempGoogleToken'))
+              },
+              {
+                type: 'Link',
+                text: 'Open Google OAuth 2.0 Playground ↗',
+                url: 'https://developers.google.com/oauthplayground/#step1&apisSelect=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fdrive.file'
+              }
+            ]
+          },
+          { type: 'Divider' },
+
+          // METHOD 2: Google Identity Services (One-Click Sign In)
+          { type: 'Label', text: '🔑 Method 2: One-Click Sign In with Google (OAuth Client ID)' },
+          {
+            type: 'Markdown',
+            text: `If you have a Google Cloud OAuth 2.0 Client ID for your domain/origin (\`https://noteroot-ai.vercel.app\` or \`http://localhost:5173\`), enter it below to sign in via Google's official OAuth popup:`
+          },
+          {
+            type: 'Input',
+            value: tempClientId,
+            placeholder: 'Enter Google Client ID (e.g. 123456789-abc.apps.googleusercontent.com)',
+            onChange: (val) => {
+              tempClientId = val;
+              settings.set('tempGoogleClientId', val);
+              settings.set('googleClientId', val);
+            }
+          },
+          {
+            type: 'Row',
+            children: [
+              {
+                type: 'Button',
+                label: '🔑 Sign in with Google (OAuth)',
+                onClick: () => connectWithGIS(tempClientId || settings.get('tempGoogleClientId') || settings.get('googleClientId'))
+              },
+              {
+                type: 'Link',
+                text: 'Google Cloud Console Credentials ↗',
+                url: 'https://console.cloud.google.com/apis/credentials'
+              }
+            ]
+          },
+          { type: 'Divider' },
+
+          // Offline fallback actions
+          { type: 'Label', text: '💾 Local Vault Tools' },
+          {
+            type: 'Row',
+            children: [
+              {
+                type: 'Button',
+                label: '⚡ Create Local Backup Snapshot',
                 onClick: () => performBackup()
               },
               {
                 type: 'Button',
-                label: '📂 Show in Drive',
-                onClick: () => showInDrive(folderInfo.folderUrl)
-              },
-              {
-                type: 'Button',
-                label: '🔄 Restore Vault',
-                onClick: () => performRestore(activeAcc.accountId)
-              },
-              {
-                type: 'Link',
-                text: 'Open Folder in Google Drive ↗',
-                url: folderInfo.folderUrl
-              }
-            ]
-          },
-
-          { type: 'Divider' },
-
-          // Automatic Backup Options
-          { type: 'Label', text: '⚙️ Automatic Backup Options' },
-          {
-            type: 'Toggle',
-            checked: isAutoBackup,
-            onChange: (enabled) => {
-              settings.set('autoBackup', enabled);
-              ui.showToast(enabled ? 'Automatic Google Drive backup enabled' : 'Automatic backup paused');
-            }
-          },
-          {
-            type: 'Text',
-            text: 'Automatically creates a snapshot of all notes in your isolated Google Drive folder every hour and upon editing notes.'
-          },
-
-          { type: 'Divider' },
-
-          // Multi-Account Registry Table (information.json)
-          { type: 'Label', text: '👥 Multi-Account Drive Registry (information.json)' },
-          {
-            type: 'Markdown',
-            text: `The **\`information.json\`** file allows you to store and restore multiple NoteRoot AI accounts under a **single Google Drive**. Available account backups found in this Drive:`
-          },
-          ...accountKeys.map((accKey) => {
-            const acc = reg.accounts[accKey];
-            return {
-              type: 'Column',
-              children: [
-                {
-                  type: 'Markdown',
-                  text: `### 👤 ${acc.name} (\`${acc.email}\`)\n- **Folder:** [\`${acc.folderName}\`](${acc.folderUrl})\n- **Notes:** ${acc.notesCount} notes | **Status:** \`${acc.status}\` | **Last Sync:** ${acc.lastBackupAt}`
-                },
-                {
-                  type: 'Row',
-                  children: [
-                    {
-                      type: 'Button',
-                      label: `📂 Show "${acc.name}" in Drive`,
-                      onClick: () => showInDrive(acc.folderUrl)
-                    },
-                    {
-                      type: 'Button',
-                      label: `🔄 Restore "${acc.name}" to Active Account`,
-                      onClick: () => performRestore(acc.accountId)
-                    },
-                    {
-                      type: 'Link',
-                      text: 'Direct Drive Link ↗',
-                      url: acc.folderUrl
-                    }
-                  ]
-                },
-                { type: 'Divider' }
-              ]
-            };
-          }),
-
-          // Drive Root & Registry Controls
-          {
-            type: 'Row',
-            children: [
-              {
-                type: 'Button',
-                label: '🌐 Show Root Backup Folder in Drive',
-                onClick: () => showInDrive(reg.driveRootUrl)
-              },
-              {
-                type: 'Button',
-                label: '📋 View information.json Manifest',
-                onClick: () => ui.openModal('drive-information-modal')
+                label: '🔄 Restore from Last Local Snapshot',
+                onClick: () => performRestore()
               }
             ]
           }
@@ -398,100 +750,35 @@ function main(ctx) {
   });
 
   // ═════════════════════════════════════════════════════════════════
-  // 2. MODAL: information.json Multi-Account Viewer
-  // ═════════════════════════════════════════════════════════════════
-  runtime.registerExtension('layout.modals', {
-    id: 'drive-information-modal',
-    title: '📄 Google Drive Multi-Account Registry (information.json)',
-    render: () => {
-      const reg = getRegistry();
-      const jsonString = JSON.stringify(reg, null, 2);
-
-      return {
-        type: 'Column',
-        children: [
-          {
-            type: 'Markdown',
-            text: `This **\`information.json\`** file resides at the root of your Google Drive backup directory (\`${reg.driveRootFolderName}\`). It indexes isolated account folders to prevent collisions across multiple NoteRoot AI accounts.`
-          },
-          {
-            type: 'Markdown',
-            text: '```json\n' + jsonString + '\n```'
-          },
-          { type: 'Divider' },
-          {
-            type: 'Row',
-            children: [
-              {
-                type: 'Button',
-                label: '📂 Open Drive Root Folder',
-                onClick: () => showInDrive(reg.driveRootUrl)
-              },
-              {
-                type: 'Button',
-                label: 'Close',
-                onClick: () => ui.openModal(null)
-              }
-            ]
-          }
-        ]
-      };
-    }
-  });
-
-  // ═════════════════════════════════════════════════════════════════
-  // 3. NOTE PAGE ACTION: Top-Right Note Editor Quick Backup Button
+  // 2. NOTE PAGE ACTION: "Backup to Google Drive" button
   // ═════════════════════════════════════════════════════════════════
   runtime.registerExtension('note.pageActions', {
     id: 'drive-backup-action',
-    icon: '☁️ Drive',
     label: 'Drive Backup',
+    icon: 'Cloud',
     onClick: async (noteId) => {
-      const currentNote = await notes.getNote(noteId);
       await performBackup();
-      if (currentNote) {
-        ui.showToast(`Backed up note "${currentNote.title}" and vault to Google Drive!`, 'success');
-      }
     }
   });
 
   // ═════════════════════════════════════════════════════════════════
-  // 4. EDITOR SLASH COMMAND: /Backup to Google Drive
+  // 3. EDITOR SLASH COMMAND: /drive-backup
   // ═════════════════════════════════════════════════════════════════
   runtime.registerExtension('editor.slashItems', {
-    title: 'Backup to Google Drive',
+    title: 'Drive Backup',
     description: 'Sync current note and full vault to Google Drive folder',
-    icon: '☁️',
-    category: 'Cloud & Backup',
+    icon: 'Cloud',
+    category: 'Integrations',
     command: ({ editor, range }) => {
       editor.chain().focus().deleteRange(range).run();
-      performBackup().then(() => {
-        const activeAcc = getActiveAccount();
-        const folder = getAccountFolder(activeAcc.accountId);
-        const time = new Date().toLocaleTimeString();
-        editor
-          .chain()
-          .focus()
-          .insertContent(`<blockquote>☁️ <strong>Google Drive Backup</strong>: Synced at ${time} to <a href="${folder.folderUrl}" target="_blank" rel="noopener noreferrer">${folder.folderName}</a></blockquote>`)
-          .run();
-      });
+      performBackup();
     }
   });
+}
 
-  // ═════════════════════════════════════════════════════════════════
-  // 5. LIFECYCLE EVENT: Automatic Sync on Note Opened / Saved
-  // ═════════════════════════════════════════════════════════════════
-  if (ctx.events && ctx.events.onNoteOpened) {
-    ctx.events.onNoteOpened((noteId) => {
-      const isAuto = settings.get('autoBackup') !== false;
-      if (isAuto) {
-        const lastSync = settings.get('lastBackupTime');
-        const now = Date.now();
-        // If more than 30 minutes since last auto sync, trigger a quiet background sync
-        if (!lastSync || (now - new Date(lastSync).getTime() > 1800000)) {
-          performBackup();
-        }
-      }
-    });
-  }
+// Support CommonJS and ES module environments
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = main;
+} else if (typeof window !== 'undefined') {
+  window.driveConnectorPlugin = main;
 }

@@ -128,17 +128,20 @@ export function DescriptorRenderer({ node }: Props): React.ReactElement | null {
     case 'Input':
       return (
         <input
-          value={node.value}
+          value={node.value || ''}
           onChange={(e) => node.onChange(e.target.value)}
           placeholder={node.placeholder}
           style={{
             width: '100%',
-            padding: '6px 10px',
+            padding: '9px 12px',
             fontSize: '13px',
             borderRadius: '6px',
-            background: 'var(--bg)',
+            background: 'var(--surface-2, rgba(255, 255, 255, 0.05))',
             border: '1px solid var(--border)',
-            color: 'var(--fg)'
+            color: 'var(--fg)',
+            boxSizing: 'border-box',
+            outline: 'none',
+            fontFamily: node.placeholder && (node.placeholder.includes('Token') || node.placeholder.includes('ID') || node.placeholder.includes('ya29')) ? 'monospace' : 'inherit',
           }}
         />
       );

@@ -69,9 +69,9 @@ export function PluginSettingsPanels() {
   }
 
   return (
-    <section style={{ padding: '24px', borderRadius: '12px', border: '1px solid var(--border)', background: 'var(--surface)' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', width: '100%' }}>
       {errors.length > 0 && (
-        <div style={{ marginBottom: '16px' }}>
+        <div style={{ marginBottom: '8px' }}>
           {errors.map(([pId, err]) => (
             <div key={pId} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 14px', borderRadius: '8px', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', color: '#ef4444', fontSize: '13px', marginBottom: '8px' }}>
               <AlertTriangle size={16} /> <span><strong>Plugin Error ({pId}):</strong> {err}</span>
@@ -79,16 +79,26 @@ export function PluginSettingsPanels() {
           ))}
         </div>
       )}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-        {uniquePanels.map((panel) => (
-          <div key={panel.id} style={{ border: '1px solid var(--border)', borderRadius: '10px', background: 'var(--bg)', padding: '18px' }}>
-            <h3 style={{ fontSize: '14px', fontWeight: 600, marginTop: 0, marginBottom: '14px', color: '#e05438' }}>
-              {panel.pluginName}
+      {uniquePanels.map((panel) => (
+        <div
+          key={panel.id}
+          style={{
+            border: '1px solid var(--border)',
+            borderRadius: '12px',
+            background: 'var(--surface)',
+            padding: '22px 24px',
+            width: '100%',
+            boxSizing: 'border-box',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', paddingBottom: '12px', borderBottom: '1px solid var(--border)' }}>
+            <h3 style={{ fontSize: '15px', fontWeight: 600, margin: 0, color: 'var(--fg)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Puzzle size={16} style={{ color: '#e05438' }} /> {panel.pluginName}
             </h3>
-            <DescriptorRenderer node={panel.render()} />
           </div>
-        ))}
-      </div>
-    </section>
+          <DescriptorRenderer node={panel.render()} />
+        </div>
+      ))}
+    </div>
   );
 }

@@ -304,8 +304,9 @@ export default function SettingsPage() {
           style={{
             flex: 1,
             overflowY: 'auto',
-            padding: '36px 44px 80px',
-            maxWidth: '680px',
+            padding: '32px 40px 80px',
+            maxWidth: activeTab === 'plugins' ? '1080px' : '760px',
+            width: '100%',
             boxSizing: 'border-box',
           }}
         >
@@ -1256,10 +1257,10 @@ export default function SettingsPage() {
 
           {/* ── PLUGINS TAB ── */}
           {activeTab === 'plugins' && (
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+            <div style={{ width: '100%' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', flexWrap: 'wrap', gap: '12px' }}>
                 <div>
-                  <h2 style={{ fontSize: '16px', fontWeight: 600, margin: '0 0 4px 0', color: 'var(--fg)' }}>
+                  <h2 style={{ fontSize: '18px', fontWeight: 600, margin: '0 0 4px 0', color: 'var(--fg)' }}>
                     Plugin Settings & Integrations
                   </h2>
                   <p style={{ fontSize: '13px', color: 'var(--muted)', margin: 0 }}>
@@ -1269,24 +1270,24 @@ export default function SettingsPage() {
                 <Link
                   to="/plugins"
                   style={{
-                    display: 'flex',
+                    display: 'inline-flex',
                     alignItems: 'center',
                     gap: '6px',
                     fontSize: '12.5px',
                     color: '#e05438',
                     textDecoration: 'none',
                     fontWeight: 500,
-                    padding: '6px 12px',
+                    padding: '7px 14px',
                     borderRadius: '6px',
                     background: 'rgba(224, 84, 56, 0.08)',
-                    border: '1px solid rgba(224, 84, 56, 0.2)',
+                    border: '1px solid rgba(224, 84, 56, 0.25)',
                   }}
                 >
                   <Puzzle size={14} /> Plugins Marketplace ↗
                 </Link>
               </div>
 
-              <div style={{ marginTop: '20px' }}>
+              <div style={{ marginTop: '16px', width: '100%' }}>
                 <PluginSettingsPanels />
               </div>
             </div>

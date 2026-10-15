@@ -12,24 +12,90 @@ export function DescriptorRenderer({ node }: Props): React.ReactElement | null {
   switch (node.type) {
     case 'Column':
       return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '100%' }}>
           {node.children.map((child, i) => <DescriptorRenderer key={i} node={child} />)}
         </div>
       );
     case 'Row':
       return (
-        <div style={{ display: 'flex', flexDirection: 'row', gap: '8px', alignItems: 'center' }}>
+        <div style={{ display: 'flex', flexDirection: 'row', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
           {node.children.map((child, i) => <DescriptorRenderer key={i} node={child} />)}
         </div>
       );
     case 'Label':
-      return <label style={{ fontSize: '13px', fontWeight: 500 }}>{node.text}</label>;
+      return <div style={{ fontSize: '13.5px', fontWeight: 600, color: 'var(--fg)', marginTop: '4px' }}>{node.text}</div>;
     case 'Text':
-      return <span style={{ fontSize: '12px', color: 'var(--muted)' }}>{node.text}</span>;
+      return <div style={{ fontSize: '12.5px', color: 'var(--muted)', lineHeight: 1.5 }}>{node.text}</div>;
     case 'Markdown':
       return (
-        <div className="prose prose-sm" style={{ color: 'var(--fg)', fontSize: '13px' }}>
-          <ReactMarkdown>{node.text}</ReactMarkdown>
+        <div
+          className="plugin-markdown-content"
+          style={{
+            color: 'var(--fg)',
+            fontSize: '13px',
+            lineHeight: 1.6,
+          }}
+        >
+          <ReactMarkdown
+            components={{
+              strong: ({ node, ...props }) => (
+                <strong style={{ color: 'var(--fg)', fontWeight: 600 }} {...props} />
+              ),
+              b: ({ node, ...props }) => (
+                <b style={{ color: 'var(--fg)', fontWeight: 600 }} {...props} />
+              ),
+              h1: ({ node, ...props }) => (
+                <h1 style={{ color: 'var(--fg)', fontSize: '17px', fontWeight: 700, margin: '12px 0 6px' }} {...props} />
+              ),
+              h2: ({ node, ...props }) => (
+                <h2 style={{ color: 'var(--fg)', fontSize: '15px', fontWeight: 600, margin: '10px 0 6px' }} {...props} />
+              ),
+              h3: ({ node, ...props }) => (
+                <h3 style={{ color: 'var(--fg)', fontSize: '14px', fontWeight: 600, margin: '8px 0 4px' }} {...props} />
+              ),
+              code: ({ node, ...props }: any) => (
+                <code
+                  style={{
+                    color: '#ff8a70',
+                    background: 'var(--surface-2, rgba(255, 255, 255, 0.08))',
+                    border: '1px solid var(--border)',
+                    padding: '2px 6px',
+                    borderRadius: '4px',
+                    fontSize: '12px',
+                    fontFamily: 'monospace',
+                  }}
+                  {...props}
+                />
+              ),
+              a: ({ node, ...props }) => (
+                <a
+                  style={{
+                    color: 'var(--accent, #e05438)',
+                    textDecoration: 'underline',
+                    wordBreak: 'break-all',
+                    fontWeight: 500,
+                  }}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  {...props}
+                />
+              ),
+              li: ({ node, ...props }) => (
+                <li style={{ color: 'var(--fg)', marginBottom: '5px' }} {...props} />
+              ),
+              p: ({ node, ...props }) => (
+                <p style={{ color: 'var(--fg)', margin: '0 0 8px 0', lineHeight: 1.55 }} {...props} />
+              ),
+              ul: ({ node, ...props }) => (
+                <ul style={{ paddingLeft: '20px', margin: '4px 0 8px 0', color: 'var(--fg)' }} {...props} />
+              ),
+              ol: ({ node, ...props }) => (
+                <ol style={{ paddingLeft: '20px', margin: '4px 0 8px 0', color: 'var(--fg)' }} {...props} />
+              ),
+            }}
+          >
+            {node.text}
+          </ReactMarkdown>
         </div>
       );
     case 'Button':
@@ -38,14 +104,22 @@ export function DescriptorRenderer({ node }: Props): React.ReactElement | null {
           onClick={node.onClick}
           disabled={node.disabled}
           style={{
-            padding: '6px 12px',
-            fontSize: '13px',
+            padding: '7px 14px',
+            fontSize: '12.5px',
+            fontWeight: 500,
             borderRadius: '6px',
-            background: 'var(--surface)',
+            background: 'var(--surface-2, rgba(255, 255, 255, 0.06))',
             border: '1px solid var(--border)',
             color: 'var(--fg)',
             cursor: node.disabled ? 'not-allowed' : 'pointer',
-            opacity: node.disabled ? 0.6 : 1
+            opacity: node.disabled ? 0.6 : 1,
+            transition: 'background 0.12s, border-color 0.12s',
+          }}
+          onMouseEnter={e => {
+            if (!node.disabled) e.currentTarget.style.background = 'var(--border)';
+          }}
+          onMouseLeave={e => {
+            if (!node.disabled) e.currentTarget.style.background = 'var(--surface-2, rgba(255, 255, 255, 0.06))';
           }}
         >
           {node.label}
@@ -116,13 +190,41 @@ export function DescriptorRenderer({ node }: Props): React.ReactElement | null {
       return <div style={{ height: '1px', background: 'var(--border)', margin: '8px 0' }} />;
     case 'Badge':
       return (
-        <span style={{ padding: '2px 6px', background: 'var(--accent)', color: 'white', borderRadius: '4px', fontSize: '10px' }}>
+        <span
+          style={{
+            padding: '3px 8px',
+            background: 'rgba(224, 84, 56, 0.15)',
+            border: '1px solid rgba(224, 84, 56, 0.35)',
+            color: '#ff8a70',
+            borderRadius: '5px',
+            fontSize: '11px',
+            fontWeight: 600,
+            display: 'inline-flex',
+            alignItems: 'center',
+            letterSpacing: '0.2px',
+          }}
+        >
           {node.text}
         </span>
       );
     case 'Link':
       return (
-        <a href={node.url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent)', fontSize: '12px', textDecoration: 'underline' }}>
+        <a
+          href={node.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            color: 'var(--accent, #e05438)',
+            fontSize: '12.5px',
+            textDecoration: 'none',
+            fontWeight: 500,
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '4px',
+          }}
+          onMouseEnter={e => { e.currentTarget.style.textDecoration = 'underline'; }}
+          onMouseLeave={e => { e.currentTarget.style.textDecoration = 'none'; }}
+        >
           {node.text}
         </a>
       );

@@ -2,7 +2,13 @@ import { useState } from 'react';
 import { Copy, Check } from 'lucide-react';
 import { findLanguage } from '../Editor/CodeBlockComponent';
 
-export function CodeBlock({ node, inline, className, children, ...props }: any) {
+export interface CodeBlockProps extends React.HTMLAttributes<HTMLElement> {
+  inline?: boolean;
+  className?: string;
+  children?: React.ReactNode;
+}
+
+export function CodeBlock({ inline, className, children, ...props }: CodeBlockProps) {
   const match = /language-(\w+)/.exec(className || '');
   const [copied, setCopied] = useState(false);
   const codeString = String(children).replace(/\n$/, '');
@@ -14,9 +20,11 @@ export function CodeBlock({ node, inline, className, children, ...props }: any) 
     setTimeout(() => setCopied(false), 2000);
   };
 
-  if (!inline && match) {
+  const isBlock = inline === false || Boolean(match || String(children).includes('\n'));
+
+  if (isBlock) {
     return (
-      <div className="code-block-wrapper">
+      <div className="code-block-wrapper my-2" style={{ borderRadius: '6px', overflow: 'hidden', border: '1px solid var(--border)' }}>
         <div className="code-block-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '5px', opacity: 0.75 }}>
@@ -83,6 +91,7 @@ export function CodeBlock({ node, inline, className, children, ...props }: any) 
           autoCorrect="off"
           autoCapitalize="off"
           data-gramm="false"
+          style={{ margin: 0, padding: '10px 12px', overflowX: 'auto', background: 'var(--bg)', fontSize: '12px' }}
         >
           <code
             className={className}
@@ -92,7 +101,7 @@ export function CodeBlock({ node, inline, className, children, ...props }: any) 
             data-gramm="false"
             {...props}
           >
-            {children}
+            {codeString}
           </code>
         </pre>
       </div>
@@ -101,11 +110,20 @@ export function CodeBlock({ node, inline, className, children, ...props }: any) 
 
   return (
     <code
-      className={className}
+      className={`chat-inline-code ${className || ''}`}
       spellCheck={false}
       autoCorrect="off"
       autoCapitalize="off"
       data-gramm="false"
+      style={{
+        background: 'var(--surface-2)',
+        color: 'var(--accent)',
+        padding: '1.5px 5px',
+        borderRadius: '4px',
+        fontSize: '12px',
+        fontFamily: 'var(--font-mono, monospace)',
+        border: '1px solid var(--border)',
+      }}
       {...props}
     >
       {children}

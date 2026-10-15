@@ -3,21 +3,18 @@ import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import NoteEditor from '../components/Editor/NoteEditor';
 import { useNoteStore } from '../stores/noteStore';
 import {
-  Star, Share2, Info, Sparkles, X, Send, Paperclip,
+  Star, Share2, Info, Sparkles, X,
   Bold, Italic, Underline, Strikethrough, Code, Code2,
   Quote, Link as LinkIcon, List, ListOrdered, Table, Image,
-  Wand2, Check, Scissors, Plus, Palette, Globe,
+  Check, Plus,
   Folder, ChevronDown, CheckSquare, Maximize2, Minimize2
 } from 'lucide-react';
-import { useSettingsStore } from '../stores/settingsStore';
-import { isBuiltinProvider, BUILTIN_PROVIDERS, type BuiltinProvider } from '../lib/providerConfig';
-import { AI_URL } from '../lib/constants';
 import { NotePageActionsBar } from '../plugins/slots/NotePageActionsBar';
+import { NoteAIPanel } from '../components/Sidebar/NoteAIPanel';
 
 export default function NoteEditorPage() {
   const { id } = useParams();
   const { saveNote, getNote, notes } = useNoteStore();
-  const { activeProvider, setActiveProvider, providerKeys, customProviders, getProviderModel } = useSettingsStore();
 
   const [title, setTitle] = useState('Untitled');
   const [content, setContent] = useState('');
@@ -26,10 +23,11 @@ export default function NoteEditorPage() {
   const [isLoaded, setIsLoaded] = useState(false);
   const [isStarred, setIsStarred] = useState(false);
   const [showAiAssistant, setShowAiAssistant] = useState(false);
-  const [aiTab, setAiTab] = useState<'Chat' | 'Edit'>('Edit');
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [editorInstance, setEditorInstance] = useState<any>(null);
   const [, setEditorTick] = useState(0);
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const handleEditorReady = useCallback((inst: any) => {
     setEditorInstance(inst);
     inst.on('selectionUpdate', () => setEditorTick(t => t + 1));
@@ -48,16 +46,6 @@ export default function NoteEditorPage() {
   const [newTagInput, setNewTagInput] = useState('');
   const [isAddingTag, setIsAddingTag] = useState(false);
 
-  // AI Assistant resizable panel width (persisted in localStorage)
-  const [aiPanelWidth, setAiPanelWidth] = useState<number>(() => {
-    try {
-      const saved = localStorage.getItem('noteroot_ai_panel_width');
-      return saved ? Math.max(260, Math.min(700, parseInt(saved, 10))) : 320;
-    } catch {
-      return 320;
-    }
-  });
-
   // Full-width editor layout toggle (persisted in localStorage, defaults to true for wide space utilization)
   const [isFullWidth, setIsFullWidth] = useState<boolean>(() => {
     try {
@@ -73,39 +61,12 @@ export default function NoteEditorPage() {
       const next = !prev;
       try {
         localStorage.setItem('noteroot_editor_full_width', String(next));
-      } catch {}
+      } catch {
+        // ignore storage errors
+      }
       return next;
     });
   };
-
-  const isResizingRef = useRef(false);
-
-  const handleResizeMouseDown = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    isResizingRef.current = true;
-    document.body.style.cursor = 'col-resize';
-    document.body.style.userSelect = 'none';
-
-    const handleMouseMove = (moveEvent: MouseEvent) => {
-      if (!isResizingRef.current) return;
-      const newWidth = Math.min(Math.max(window.innerWidth - moveEvent.clientX, 260), 700);
-      setAiPanelWidth(newWidth);
-      try {
-        localStorage.setItem('noteroot_ai_panel_width', String(newWidth));
-      } catch {}
-    };
-
-    const handleMouseUp = () => {
-      isResizingRef.current = false;
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-    };
-
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
-  }, []);
 
   const availableSpaces = useMemo(() => {
     const set = new Set<string>(['Other']);
@@ -133,15 +94,7 @@ export default function NoteEditorPage() {
     };
   }, [showInfoModal, showSpaceMenu]);
 
-  // AI Assistant chat state
-  const [aiPrompt, setAiPrompt] = useState('');
-  const [aiLoading, setAiLoading] = useState(false);
-  const [aiChatMessages, setAiChatMessages] = useState<Array<{ role: 'user' | 'assistant'; text: string }>>([
-    {
-      role: 'assistant',
-      text: 'I can help you write, refine, or analyze this document. Select text or choose an action below.',
-    },
-  ]);
+
 
   const titleRef = useRef(title);
   const contentRef = useRef(content);
@@ -171,10 +124,13 @@ export default function NoteEditorPage() {
         window.dispatchEvent(new CustomEvent('NOTEROOT_NOTE_OPENED', { detail: { noteId: id } }));
       });
     } else {
-      setTitle('Untitled');
-      setContent('');
-      setSpace('Other');
-      setIsLoaded(true);
+      setTimeout(() => {
+        if (!active) return;
+        setTitle('Untitled');
+        setContent('');
+        setSpace('Other');
+        setIsLoaded(true);
+      }, 0);
     }
     return () => {
       active = false;
@@ -237,123 +193,7 @@ export default function NoteEditorPage() {
     triggerSave(undefined, undefined, nextTags);
   };
 
-  // AI Assistant action handlers
-  const handleAiAction = async (actionLabel: string, promptInstruction: string) => {
-    setAiLoading(true);
-    const selectedText = editorInstance?.state.selection
-      ? editorInstance.state.doc.textBetween(
-          editorInstance.state.selection.from,
-          editorInstance.state.selection.to,
-          ' '
-        )
-      : '';
-    const textToProcess = selectedText || contentRef.current;
 
-    const userMessage = `${actionLabel}: ${textToProcess.slice(0, 80)}...`;
-    setAiChatMessages(prev => [...prev, { role: 'user', text: userMessage }]);
-
-    try {
-      const apiKey = providerKeys[activeProvider as keyof typeof providerKeys] || '';
-      const custom = customProviders.find(c => c.id === activeProvider);
-      let providerToUse = activeProvider;
-      let effectiveKey = apiKey || custom?.apiKey || '';
-
-      if (!effectiveKey && !custom?.baseUrl) {
-        const altBuiltin = (Object.keys(BUILTIN_PROVIDERS) as BuiltinProvider[])
-          .find((p: BuiltinProvider) => (providerKeys[p] ?? '').trim().length > 0);
-        if (altBuiltin) {
-          providerToUse = altBuiltin;
-          effectiveKey = providerKeys[altBuiltin]!;
-          setActiveProvider(altBuiltin);
-        } else {
-          setAiChatMessages(prev => [
-            ...prev,
-            {
-              role: 'assistant',
-              text: `⚠️ No API key set for "${activeProvider}". Please go to Settings → AI & Models to configure your key and ensure your provider is set as the active engine.`,
-            },
-          ]);
-          return;
-        }
-      }
-
-      const res = await fetch(`${AI_URL}/chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          messages: [
-            {
-              role: 'system',
-              content: `You are an AI writing assistant for NoteRoot AI. The user asked: "${promptInstruction}". Output your suggestion cleanly.`,
-            },
-            { role: 'user', content: textToProcess },
-          ],
-          provider: isBuiltinProvider(providerToUse) ? providerToUse : 'custom',
-          model: getProviderModel(providerToUse),
-          api_key: effectiveKey,
-          custom_base_url: custom?.baseUrl,
-        }),
-      });
-
-      if (res.ok) {
-        let reply = '';
-        const contentType = res.headers.get('content-type') || '';
-        if (contentType.includes('application/json')) {
-          const data = await res.json();
-          reply = data.reply || data.choices?.[0]?.message?.content || data.content || '';
-        } else {
-          reply = await res.text();
-        }
-
-        if (reply.startsWith('\n\n[Error from')) {
-          setAiChatMessages(prev => [
-            ...prev,
-            {
-              role: 'assistant',
-              text: `⚠️ ${reply.trim()}`,
-            },
-          ]);
-        } else {
-          setAiChatMessages(prev => [...prev, { role: 'assistant', text: reply.trim() || 'Completed with no output.' }]);
-        }
-      } else {
-        const errorText = await res.text().catch(() => '');
-        setAiChatMessages(prev => [
-          ...prev,
-          {
-            role: 'assistant',
-            text: `⚠️ AI request failed (${res.status}): ${errorText || 'Please check your API key and provider in Settings.'}`,
-          },
-        ]);
-      }
-    } catch (err: any) {
-      setAiChatMessages(prev => [
-        ...prev,
-        {
-          role: 'assistant',
-          text: `⚠️ AI service error: ${err.message || 'Make sure the backend is running.'}`,
-        },
-      ]);
-    } finally {
-      setAiLoading(false);
-    }
-  };
-
-  const handleSendPrompt = () => {
-    if (!aiPrompt.trim() || aiLoading) return;
-    const text = aiPrompt;
-    setAiPrompt('');
-    handleAiAction('Custom prompt', text);
-  };
-
-  const aiActionButtons = [
-    { label: 'Improve writing', icon: <Wand2 size={13} />, prompt: 'Improve clarity and flow while preserving meaning' },
-    { label: 'Fix grammar', icon: <Check size={13} />, prompt: 'Fix any spelling, grammar, or punctuation errors' },
-    { label: 'Make shorter', icon: <Scissors size={13} />, prompt: 'Condense and make more concise' },
-    { label: 'Expand this section', icon: <Plus size={13} />, prompt: 'Elaborate with deeper explanation and examples' },
-    { label: 'Change tone', icon: <Palette size={13} />, prompt: 'Make the tone professional, crisp and engaging' },
-    { label: 'Translate', icon: <Globe size={13} />, prompt: 'Translate this section into Spanish or target language' },
-  ];
 
   if (!isLoaded) {
     return (
@@ -998,244 +838,13 @@ export default function NoteEditorPage() {
 
       {/* ── Right AI Assistant Panel (Collapsible & Resizable) ── */}
       {showAiAssistant && (
-        <aside
-          style={{
-            width: `${aiPanelWidth}px`,
-            minWidth: `${aiPanelWidth}px`,
-            maxWidth: `${aiPanelWidth}px`,
-            borderLeft: '1px solid var(--border)',
-            background: 'var(--surface)',
-            display: 'flex',
-            flexDirection: 'column',
-            height: '100%',
-            overflow: 'hidden',
-            position: 'relative',
-            flexShrink: 0,
-          }}
-        >
-          {/* Draggable Resize Handle on Left Border */}
-          <div
-            onMouseDown={handleResizeMouseDown}
-            title="Drag to resize AI Assistant panel"
-            style={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              bottom: 0,
-              width: '6px',
-              cursor: 'col-resize',
-              zIndex: 50,
-              transition: 'background 0.15s',
-            }}
-            onMouseEnter={e => (e.currentTarget.style.background = 'rgba(224, 84, 56, 0.4)')}
-            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-          />
-          {/* AI Panel Header */}
-          <div
-            style={{
-              height: '48px',
-              padding: '0 14px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              borderBottom: '1px solid var(--border)',
-              flexShrink: 0,
-            }}
-          >
-            <span style={{ fontSize: '13.5px', fontWeight: 600, color: 'var(--fg)' }}>
-              AI Assistant
-            </span>
-            <button
-              onClick={() => setShowAiAssistant(false)}
-              style={{
-                background: 'transparent',
-                border: 'none',
-                color: 'var(--muted)',
-                cursor: 'pointer',
-                padding: '4px',
-                borderRadius: '4px',
-                display: 'flex',
-              }}
-            >
-              <X size={16} />
-            </button>
-          </div>
-
-          {/* Chat / Edit Sub-Tabs */}
-          <div
-            style={{
-              display: 'flex',
-              padding: '6px 14px',
-              gap: '6px',
-              borderBottom: '1px solid var(--border)',
-              background: 'var(--surface-2)',
-            }}
-          >
-            {(['Chat', 'Edit'] as const).map(tab => (
-              <button
-                key={tab}
-                onClick={() => setAiTab(tab)}
-                style={{
-                  flex: 1,
-                  padding: '5px 0',
-                  fontSize: '12px',
-                  fontWeight: 500,
-                  borderRadius: '4px',
-                  border: 'none',
-                  cursor: 'pointer',
-                  background: aiTab === tab ? 'var(--surface)' : 'transparent',
-                  color: aiTab === tab ? '#e05438' : 'var(--muted)',
-                  boxShadow: aiTab === tab ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
-                  transition: 'background 0.15s, color 0.15s',
-                }}
-              >
-                {tab}
-              </button>
-            ))}
-          </div>
-
-          {/* AI Panel Body */}
-          <div
-            style={{
-              flex: 1,
-              overflowY: 'auto',
-              padding: '12px 14px',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '8px',
-            }}
-          >
-            {aiTab === 'Edit' ? (
-              <>
-                <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', marginBottom: '4px' }}>
-                  Quick Actions
-                </div>
-                {aiActionButtons.map(action => (
-                  <button
-                    key={action.label}
-                    onClick={() => handleAiAction(action.label, action.prompt)}
-                    disabled={aiLoading}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      padding: '8px 10px',
-                      borderRadius: '6px',
-                      border: '1px solid var(--border)',
-                      background: 'var(--bg)',
-                      color: 'var(--fg)',
-                      fontSize: '12.5px',
-                      cursor: aiLoading ? 'not-allowed' : 'pointer',
-                      textAlign: 'left',
-                      transition: 'background 0.12s, border-color 0.12s',
-                    }}
-                    onMouseEnter={e => {
-                      if (!aiLoading) {
-                        e.currentTarget.style.borderColor = '#e05438';
-                        e.currentTarget.style.background = 'var(--surface)';
-                      }
-                    }}
-                    onMouseLeave={e => {
-                      if (!aiLoading) {
-                        e.currentTarget.style.borderColor = 'var(--border)';
-                        e.currentTarget.style.background = 'var(--bg)';
-                      }
-                    }}
-                  >
-                    <span style={{ color: '#e05438' }}>{action.icon}</span>
-                    <span>{action.label}</span>
-                  </button>
-                ))}
-              </>
-            ) : null}
-
-            {/* Chat Messages */}
-            <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              {aiChatMessages.map((msg, idx) => (
-                <div
-                  key={idx}
-                  style={{
-                    padding: '8px 10px',
-                    borderRadius: '6px',
-                    fontSize: '12.5px',
-                    lineHeight: 1.5,
-                    background: msg.role === 'user' ? '#e05438' : 'var(--bg)',
-                    color: msg.role === 'user' ? '#ffffff' : 'var(--fg)',
-                    border: msg.role === 'user' ? 'none' : '1px solid var(--border)',
-                    whiteSpace: 'pre-wrap',
-                  }}
-                >
-                  {msg.text}
-                </div>
-              ))}
-              {aiLoading && (
-                <div style={{ fontSize: '12px', color: 'var(--muted)', fontStyle: 'italic', padding: '4px' }}>
-                  AI is thinking...
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* AI Panel Bottom Input */}
-          <div
-            style={{
-              padding: '10px 14px',
-              borderTop: '1px solid var(--border)',
-              background: 'var(--surface)',
-            }}
-          >
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                background: 'var(--bg)',
-                border: '1px solid var(--border)',
-                borderRadius: '6px',
-                padding: '4px 8px',
-              }}
-            >
-              <Paperclip size={14} style={{ color: 'var(--muted)', cursor: 'pointer', flexShrink: 0 }} />
-              <input
-                type="text"
-                value={aiPrompt}
-                onChange={e => setAiPrompt(e.target.value)}
-                onKeyDown={e => {
-                  if (e.key === 'Enter') handleSendPrompt();
-                }}
-                placeholder="Ask or edit this note..."
-                style={{
-                  flex: 1,
-                  border: 'none',
-                  outline: 'none',
-                  background: 'transparent',
-                  color: 'var(--fg)',
-                  fontSize: '12px',
-                  padding: '4px 0',
-                }}
-              />
-              <button
-                onClick={handleSendPrompt}
-                disabled={aiLoading}
-                style={{
-                  width: '24px',
-                  height: '24px',
-                  borderRadius: '4px',
-                  background: '#e05438',
-                  color: '#ffffff',
-                  border: 'none',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  cursor: aiLoading ? 'not-allowed' : 'pointer',
-                  flexShrink: 0,
-                }}
-              >
-                <Send size={12} />
-              </button>
-            </div>
-          </div>
-        </aside>
+        <NoteAIPanel
+          noteId={id}
+          editorInstance={editorInstance}
+          getNoteHtml={() => contentRef.current}
+          title={title}
+          onClose={() => setShowAiAssistant(false)}
+        />
       )}
     </div>
   );

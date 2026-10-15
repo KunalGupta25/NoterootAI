@@ -6,9 +6,11 @@ export interface CodeBlockProps extends React.HTMLAttributes<HTMLElement> {
   inline?: boolean;
   className?: string;
   children?: React.ReactNode;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  node?: any;
 }
 
-export function CodeBlock({ inline, className, children, ...props }: CodeBlockProps) {
+export function CodeBlock({ inline, className, children, node: _node, ...props }: CodeBlockProps) {
   const match = /language-(\w+)/.exec(className || '');
   const [copied, setCopied] = useState(false);
   const codeString = String(children).replace(/\n$/, '');

@@ -8,7 +8,7 @@ interface ChatMarkdownProps {
   className?: string;
 }
 
-export const ChatMarkdown: React.FC<ChatMarkdownProps> = ({ content, className = '' }) => {
+export const ChatMarkdown: React.FC<ChatMarkdownProps> = React.memo(({ content, className = '' }) => {
   return (
     <div
       className={`chat-markdown ${className}`}
@@ -157,4 +157,5 @@ export const ChatMarkdown: React.FC<ChatMarkdownProps> = ({ content, className =
       </ReactMarkdown>
     </div>
   );
-};
+});
+ChatMarkdown.displayName = 'ChatMarkdown';

@@ -147,18 +147,34 @@ export const NoteAIPanel: React.FC<NoteAIPanelProps> = ({
   });
   const isDraggingRef = useRef(false);
 
-  // Check capabilities from backend
+  const [wakingServer, setWakingServer] = useState(false);
+
+  // Check capabilities from backend with backoff
   useEffect(() => {
-    fetch(`${AI_URL}/assist/capabilities`)
-      .then(r => (r.ok ? r.json() : null))
-      .then(cap => {
-        if (cap && typeof cap.web_available === 'boolean') {
-          setWebAvailable(cap.web_available);
+    let cancelled = false;
+    let delay = 1000;
+    const fetchCapabilities = async () => {
+      try {
+        const r = await fetch(`${AI_URL}/assist/capabilities`);
+        if (r.ok) {
+          const cap = await r.json();
+          if (!cancelled && typeof cap.web_available === 'boolean') {
+            setWebAvailable(cap.web_available);
+            return;
+          }
         }
-      })
-      .catch(() => {
-        setWebAvailable(false);
-      });
+      } catch {
+        // Backoff retry
+      }
+      if (!cancelled && delay <= 8000) {
+        setTimeout(fetchCapabilities, delay);
+        delay *= 2;
+      }
+    };
+    fetchCapabilities();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Close menus on outside click
@@ -219,20 +235,254 @@ export const NoteAIPanel: React.FC<NoteAIPanelProps> = ({
     }
   }, [messages, aiLoading]);
 
-  const handleCopyMessage = (id: string, text: string) => {
+interface MessageRowProps {
+  msg: PanelMessage;
+  copiedId: string | null;
+  onCopy: (id: string, text: string) => void;
+  onReplaceSelection: (msg: PanelMessage) => void;
+  onInsertBelow: (msg: PanelMessage) => void;
+  appliedActionMsg: { id: string; action: string } | null;
+  aiLoading: boolean;
+}
+
+const MessageRow: React.FC<MessageRowProps> = React.memo(({
+  msg,
+  copiedId,
+  onCopy,
+  onReplaceSelection,
+  onInsertBelow,
+  appliedActionMsg,
+  aiLoading,
+}) => {
+  if (msg.role === 'user') {
+    return (
+      <div
+        style={{
+          alignSelf: 'flex-end',
+          maxWidth: '92%',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '4px',
+        }}
+      >
+        {msg.displayHeader && (
+          <div
+            style={{
+              fontSize: '11px',
+              color: 'var(--muted)',
+              textAlign: 'right',
+              fontWeight: 500,
+            }}
+          >
+            {msg.displayHeader}
+          </div>
+        )}
+        <div
+          style={{
+            padding: '8px 12px',
+            borderRadius: '8px 8px 2px 8px',
+            fontSize: '13px',
+            lineHeight: 1.5,
+            background: '#e05438',
+            color: '#ffffff',
+            wordBreak: 'break-word',
+            whiteSpace: 'pre-wrap',
+            boxShadow: '0 1px 3px rgba(224, 84, 56, 0.25)',
+          }}
+        >
+          {msg.content}
+        </div>
+      </div>
+    );
+  }
+
+  if (msg.isError) {
+    return (
+      <div
+        style={{
+          padding: '10px 12px',
+          borderRadius: '6px',
+          background: 'rgba(239, 68, 68, 0.1)',
+          border: '1px solid rgba(239, 68, 68, 0.3)',
+          color: '#ef4444',
+          fontSize: '12.5px',
+          display: 'flex',
+          gap: '8px',
+          alignItems: 'flex-start',
+        }}
+      >
+        <AlertCircle size={16} style={{ flexShrink: 0, marginTop: '2px' }} />
+        <div style={{ flex: 1, whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>
+          {msg.content}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      style={{
+        alignSelf: 'flex-start',
+        width: '100%',
+        background: 'var(--bg)',
+        border: '1px solid var(--border)',
+        borderRadius: '8px 8px 8px 2px',
+        padding: '10px 12px',
+        boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+      }}
+    >
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          marginBottom: '6px',
+        }}
+      >
+        <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--muted)' }}>
+          AI Response
+        </span>
+        {msg.content && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <button
+              onClick={() => onCopy(msg.id, msg.content)}
+              title="Copy response"
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: copiedId === msg.id ? '#22c55e' : 'var(--muted)',
+                cursor: 'pointer',
+                padding: '2px 4px',
+                borderRadius: '4px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '3px',
+                fontSize: '11px',
+              }}
+            >
+              {copiedId === msg.id ? <Check size={12} /> : <Copy size={12} />}
+              <span>{copiedId === msg.id ? 'Copied' : 'Copy'}</span>
+            </button>
+          </div>
+        )}
+      </div>
+
+      <ChatMarkdown content={msg.content || (aiLoading ? 'Thinking...' : '')} />
+
+      {msg.isEditResult && msg.content && !aiLoading && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            marginTop: '8px',
+            paddingTop: '8px',
+            borderTop: '1px solid var(--border)',
+          }}
+        >
+          {msg.capturedSelection && (
+            <button
+              onClick={() => onReplaceSelection(msg)}
+              title="Replace original selection in note"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
+                padding: '4px 8px',
+                borderRadius: '4px',
+                border: '1px solid #e05438',
+                background: 'rgba(224, 84, 56, 0.08)',
+                color: '#e05438',
+                fontSize: '11.5px',
+                fontWeight: 500,
+                cursor: 'pointer',
+              }}
+            >
+              <RefreshCw size={11} />
+              <span>
+                {appliedActionMsg?.id === msg.id && appliedActionMsg.action === 'Replaced'
+                  ? 'Replaced!'
+                  : 'Replace selection'}
+              </span>
+            </button>
+          )}
+          <button
+            onClick={() => onInsertBelow(msg)}
+            title="Insert text below current cursor or selection"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '4px',
+              padding: '4px 8px',
+              borderRadius: '4px',
+              border: '1px solid var(--border)',
+              background: 'var(--surface)',
+              color: 'var(--fg)',
+              fontSize: '11.5px',
+              fontWeight: 500,
+              cursor: 'pointer',
+            }}
+          >
+            <CornerDownRight size={11} />
+            <span>
+              {appliedActionMsg?.id === msg.id && appliedActionMsg.action === 'Inserted'
+                ? 'Inserted!'
+                : 'Insert below'}
+            </span>
+          </button>
+        </div>
+      )}
+
+      {msg.metaText && (
+        <div
+          style={{
+            fontSize: '10.5px',
+            color: 'var(--muted)',
+            marginTop: '6px',
+            paddingTop: '6px',
+            borderTop: '1px solid var(--border)',
+            opacity: 0.85,
+          }}
+        >
+          {msg.metaText}
+        </div>
+      )}
+    </div>
+  );
+});
+MessageRow.displayName = 'MessageRow';
+
+  const handleCopyMessage = useCallback((id: string, text: string) => {
     navigator.clipboard.writeText(text);
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
-  };
+  }, []);
 
   const getSelectionInfo = useCallback(() => {
     if (!editorInstance?.state?.selection) return null;
-    const { from, to } = editorInstance.state.selection;
-    if (from === to) return null;
-    const text = editorInstance.state.doc.textBetween(from, to, ' ');
-    if (!text || !text.trim()) return null;
-    const words = text.trim().split(/\s+/).length;
-    return { text, words, from, to };
+    const { from, to, $from } = editorInstance.state.selection;
+    if (from !== to) {
+      const text = editorInstance.state.doc.textBetween(from, to, ' ');
+      if (text && text.trim()) {
+        const words = text.trim().split(/\s+/).length;
+        return { text, words, from, to, isBlock: false };
+      }
+    }
+    // No active selection: target block at cursor ($from.parent.textContent)
+    if ($from?.parent?.textContent) {
+      const blockText = $from.parent.textContent;
+      if (blockText.trim()) {
+        const words = blockText.trim().split(/\s+/).length;
+        return {
+          text: blockText,
+          words,
+          from: $from.start(),
+          to: $from.end(),
+          isBlock: true,
+        };
+      }
+    }
+    return null;
   }, [editorInstance]);
 
   const handleStop = useCallback(() => {
@@ -243,21 +493,53 @@ export const NoteAIPanel: React.FC<NoteAIPanelProps> = ({
     setAiLoading(false);
   }, []);
 
-  // Compute live routing and token estimate
-  const selection = getSelectionInfo();
-  const rawHtml = getNoteHtml();
-  const compactMd = useMemo(() => htmlToCompactMarkdown(rawHtml), [rawHtml]);
+  // Debounce the prompt text used for routing/token estimates (250 ms)
+  const [debouncedPrompt, setDebouncedPrompt] = useState(aiPrompt);
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedPrompt(aiPrompt), 250);
+    return () => clearTimeout(timer);
+  }, [aiPrompt]);
+
+  // Compute htmlToCompactMarkdown debounced (500 ms) and only while panel is open
+  const [compactMd, setCompactMd] = useState('');
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setCompactMd(htmlToCompactMarkdown(getNoteHtml()));
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [getNoteHtml]);
+
+  useEffect(() => {
+    setCompactMd(htmlToCompactMarkdown(getNoteHtml()));
+  }, []);
+
+  // Memoize chunkNote(compactMd) separately from rankChunks
+  const noteChunks = useMemo(() => chunkNote(compactMd), [compactMd]);
   const noteTotalTokens = useMemo(() => estimateTokens(compactMd), [compactMd]);
 
+  const selection = getSelectionInfo();
+
   const effectiveRoute = useMemo(() => {
-    const base = routeIntent(aiPrompt, {
+    const base = routeIntent(debouncedPrompt, {
       hasSelection: Boolean(selection),
       mode: aiTab === 'Edit' ? 'edit' : 'chat',
       webAvailable,
       noteTokens: noteTotalTokens,
     });
 
-    const resolvedNote: NoteContextMode = noteOverride === 'auto' ? base.note : noteOverride;
+    let resolvedNote: NoteContextMode;
+    if (aiTab === 'Edit') {
+      if (noteOverride === 'full') {
+        resolvedNote = 'full';
+      } else if (selection) {
+        resolvedNote = 'selection';
+      } else {
+        resolvedNote = 'none';
+      }
+    } else {
+      resolvedNote = noteOverride === 'auto' ? base.note : noteOverride;
+    }
+
     const resolvedVault = vaultOverride === 'auto' ? base.vault : vaultOverride === 'on';
     const resolvedWeb = webOverride === 'auto' ? (base.web && webAvailable) : (webOverride === 'on' && webAvailable);
 
@@ -267,7 +549,7 @@ export const NoteAIPanel: React.FC<NoteAIPanelProps> = ({
       web: resolvedWeb,
       reason: base.reason,
     };
-  }, [aiPrompt, selection, aiTab, webAvailable, noteTotalTokens, noteOverride, vaultOverride, webOverride]);
+  }, [debouncedPrompt, selection, aiTab, webAvailable, noteTotalTokens, noteOverride, vaultOverride, webOverride]);
 
   const liveContextTokens = useMemo(() => {
     let tokens = 0;
@@ -276,14 +558,13 @@ export const NoteAIPanel: React.FC<NoteAIPanelProps> = ({
     } else if (effectiveRoute.note === 'full') {
       tokens += noteTotalTokens;
     } else if (effectiveRoute.note === 'relevant') {
-      const chunks = chunkNote(compactMd);
-      const ranked = rankChunks(aiPrompt, chunks, CONTEXT_BUDGETS.NOTE_CONTEXT);
+      const ranked = rankChunks(debouncedPrompt, noteChunks, CONTEXT_BUDGETS.NOTE_CONTEXT);
       tokens += ranked.reduce((acc, c) => acc + c.tokens, 0);
     }
     if (effectiveRoute.vault) tokens += CONTEXT_BUDGETS.VAULT;
     if (effectiveRoute.web) tokens += CONTEXT_BUDGETS.WEB;
     return tokens;
-  }, [effectiveRoute, selection, noteTotalTokens, compactMd, aiPrompt]);
+  }, [effectiveRoute, selection, noteTotalTokens, noteChunks, debouncedPrompt]);
 
   // Edit action handlers: Replace Selection & Insert Below
   const handleReplaceSelection = useCallback(async (msg: PanelMessage) => {
@@ -342,7 +623,9 @@ export const NoteAIPanel: React.FC<NoteAIPanelProps> = ({
     const currentSelection = getSelectionInfo();
     const isEditMode = aiTab === 'Edit';
     const targetDescriptor = currentSelection
-      ? `selection (${currentSelection.words} words)`
+      ? currentSelection.isBlock
+        ? 'cursor block'
+        : `selection (${currentSelection.words} words)`
       : effectiveRoute.note === 'none'
       ? 'general'
       : effectiveRoute.note === 'relevant'
@@ -399,7 +682,7 @@ export const NoteAIPanel: React.FC<NoteAIPanelProps> = ({
       if (effectiveRoute.note === 'selection' && currentSelection) {
         noteContentPayload.push({
           title,
-          heading: 'Selected text',
+          heading: currentSelection.isBlock ? 'Cursor block' : 'Selected text',
           text: currentSelection.text,
         });
       } else if (effectiveRoute.note === 'full') {
@@ -409,8 +692,7 @@ export const NoteAIPanel: React.FC<NoteAIPanelProps> = ({
           text: compactMd,
         });
       } else if (effectiveRoute.note === 'relevant') {
-        const chunks = chunkNote(compactMd);
-        const ranked = rankChunks(promptInstruction, chunks, CONTEXT_BUDGETS.NOTE_CONTEXT);
+        const ranked = rankChunks(promptInstruction, noteChunks, CONTEXT_BUDGETS.NOTE_CONTEXT);
         for (const c of ranked) {
           noteContentPayload.push({
             title,
@@ -420,10 +702,12 @@ export const NoteAIPanel: React.FC<NoteAIPanelProps> = ({
         }
       }
 
-      // History for multi-turn (only raw text, never context)
-      const cleanHistory = messages
-        .filter(m => !m.isError && m.id !== 'welcome')
-        .map(m => ({ role: m.role, content: m.content }));
+      // History for multi-turn (only raw text, never context; strictly stateless in edit mode)
+      const cleanHistory = isEditMode
+        ? []
+        : messages
+            .filter(m => !m.isError && m.id !== 'welcome')
+            .map(m => ({ role: m.role, content: m.content }));
 
       const builtMessages = buildMessages({
         mode: isEditMode ? 'edit' : 'chat',
@@ -445,7 +729,9 @@ export const NoteAIPanel: React.FC<NoteAIPanelProps> = ({
       if (noteContentPayload.length > 0) {
         usedParts.push(
           effectiveRoute.note === 'selection'
-            ? 'note (selection)'
+            ? currentSelection?.isBlock
+              ? 'note (block)'
+              : 'note (selection)'
             : effectiveRoute.note === 'full'
             ? 'note (full)'
             : `note (${noteContentPayload.length} sections)`
@@ -463,31 +749,52 @@ export const NoteAIPanel: React.FC<NoteAIPanelProps> = ({
         estimatedInputTokens
       );
 
-      // Call /assist SSE endpoint
-      const res = await fetch(`${AI_URL}/assist`, {
+      const wakeTimer = setTimeout(() => {
+        setWakingServer(true);
+      }, 3000);
+
+      const requestPayload = {
+        messages: builtMessages,
+        mode: isEditMode ? 'edit' : 'chat',
+        provider: isBuiltinProvider(providerToUse) ? providerToUse : 'custom',
+        model: getProviderModel(providerToUse),
+        api_key: effectiveKey,
+        custom_base_url: custom?.baseUrl,
+        vault: {
+          enabled: effectiveRoute.vault,
+          top_k: 3,
+          exclude_note_id: noteId,
+        },
+        web: {
+          enabled: effectiveRoute.web,
+          max_results: 3,
+        },
+        temperature: modeParams.temperature,
+        max_tokens: modeParams.max_tokens,
+      };
+
+      const fetchOptions: RequestInit = {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         signal: controller.signal,
-        body: JSON.stringify({
-          messages: builtMessages,
-          mode: isEditMode ? 'edit' : 'chat',
-          provider: isBuiltinProvider(providerToUse) ? providerToUse : 'custom',
-          model: getProviderModel(providerToUse),
-          api_key: effectiveKey,
-          custom_base_url: custom?.baseUrl,
-          vault: {
-            enabled: effectiveRoute.vault,
-            top_k: 3,
-            exclude_note_id: noteId,
-          },
-          web: {
-            enabled: effectiveRoute.web,
-            max_results: 3,
-          },
-          temperature: modeParams.temperature,
-          max_tokens: modeParams.max_tokens,
-        }),
-      });
+        body: JSON.stringify(requestPayload),
+      };
+
+      // Call /assist SSE endpoint with cold start single-retry
+      let res: Response;
+      try {
+        res = await fetch(`${AI_URL}/assist`, fetchOptions);
+      } catch (firstErr: any) {
+        if (firstErr?.name !== 'AbortError') {
+          await new Promise(r => setTimeout(r, 1000));
+          res = await fetch(`${AI_URL}/assist`, fetchOptions);
+        } else {
+          throw firstErr;
+        }
+      } finally {
+        clearTimeout(wakeTimer);
+        setWakingServer(false);
+      }
 
       if (!res.ok) {
         const errText = await res.text().catch(() => '');
@@ -514,6 +821,28 @@ export const NoteAIPanel: React.FC<NoteAIPanelProps> = ({
         let buffer = '';
         let accumulated = '';
         let currentMeta = metaText;
+        let rafId: number | null = null;
+        let lastRafTime = 0;
+
+        const scheduleFlush = () => {
+          const currentTime = performance.now();
+          if (currentTime - lastRafTime >= 50) {
+            lastRafTime = currentTime;
+            const text = accumulated;
+            setMessages(prev =>
+              prev.map(m => (m.id === assistantMsgId ? { ...m, content: text } : m))
+            );
+          } else if (!rafId) {
+            rafId = requestAnimationFrame(() => {
+              rafId = null;
+              lastRafTime = performance.now();
+              const text = accumulated;
+              setMessages(prev =>
+                prev.map(m => (m.id === assistantMsgId ? { ...m, content: text } : m))
+              );
+            });
+          }
+        };
 
         while (true) {
           const { done, value } = await reader.read();
@@ -536,7 +865,9 @@ export const NoteAIPanel: React.FC<NoteAIPanelProps> = ({
                 if (noteContentPayload.length > 0) {
                   parts.push(
                     effectiveRoute.note === 'selection'
-                      ? 'note (selection)'
+                      ? currentSelection?.isBlock
+                        ? 'note (block)'
+                        : 'note (selection)'
                       : effectiveRoute.note === 'full'
                       ? 'note (full)'
                       : `note (${noteContentPayload.length} sections)`
@@ -551,10 +882,19 @@ export const NoteAIPanel: React.FC<NoteAIPanelProps> = ({
                 );
               } else if (event.type === 'text') {
                 accumulated += event.content || '';
-                const snapshot = accumulated;
+                scheduleFlush();
+              } else if (event.type === 'usage' && event.usage) {
+                const promptTokens = event.usage.prompt_tokens;
+                const tokenK = (promptTokens / 1000).toFixed(1);
+                currentMeta = currentMeta.replace(/~[0-9.]+k tokens in/, `${tokenK}k tokens in (${promptTokens} tokens)`);
                 setMessages(prev =>
-                  prev.map(m => (m.id === assistantMsgId ? { ...m, content: snapshot } : m))
+                  prev.map(m => (m.id === assistantMsgId ? { ...m, metaText: currentMeta } : m))
                 );
+              } else if (event.type === 'done') {
+                if (event.finish_reason === 'length') {
+                  accumulated += '\n\n*(⚠️ Response was cut off)*';
+                  scheduleFlush();
+                }
               } else if (event.type === 'error') {
                 const errMsg = event.error || 'AI generation error';
                 setMessages(prev =>
@@ -568,6 +908,14 @@ export const NoteAIPanel: React.FC<NoteAIPanelProps> = ({
             }
           }
         }
+
+        if (rafId) {
+          cancelAnimationFrame(rafId);
+          rafId = null;
+        }
+        setMessages(prev =>
+          prev.map(m => (m.id === assistantMsgId ? { ...m, content: accumulated } : m))
+        );
       } else {
         const text = await res.text();
         setMessages(prev =>
@@ -787,208 +1135,36 @@ export const NoteAIPanel: React.FC<NoteAIPanelProps> = ({
 
         {/* Message Thread */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-          {messages.map(msg => {
-            if (msg.role === 'user') {
-              return (
-                <div
-                  key={msg.id}
-                  style={{
-                    alignSelf: 'flex-end',
-                    maxWidth: '92%',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '4px',
-                  }}
-                >
-                  {msg.displayHeader && (
-                    <div
-                      style={{
-                        fontSize: '11px',
-                        color: 'var(--muted)',
-                        textAlign: 'right',
-                        fontWeight: 500,
-                      }}
-                    >
-                      {msg.displayHeader}
-                    </div>
-                  )}
-                  <div
-                    style={{
-                      padding: '8px 12px',
-                      borderRadius: '8px 8px 2px 8px',
-                      fontSize: '13px',
-                      lineHeight: 1.5,
-                      background: '#e05438',
-                      color: '#ffffff',
-                      wordBreak: 'break-word',
-                      whiteSpace: 'pre-wrap',
-                      boxShadow: '0 1px 3px rgba(224, 84, 56, 0.25)',
-                    }}
-                  >
-                    {msg.content}
-                  </div>
-                </div>
-              );
-            }
+          {messages.map(msg => (
+            <MessageRow
+              key={msg.id}
+              msg={msg}
+              copiedId={copiedId}
+              onCopy={handleCopyMessage}
+              onReplaceSelection={handleReplaceSelection}
+              onInsertBelow={handleInsertBelow}
+              appliedActionMsg={appliedActionMsg}
+              aiLoading={aiLoading}
+            />
+          ))}
 
-            // Assistant or System/Error message
-            if (msg.isError) {
-              return (
-                <div
-                  key={msg.id}
-                  style={{
-                    padding: '10px 12px',
-                    borderRadius: '6px',
-                    background: 'rgba(239, 68, 68, 0.1)',
-                    border: '1px solid rgba(239, 68, 68, 0.3)',
-                    color: '#ef4444',
-                    fontSize: '12.5px',
-                    display: 'flex',
-                    gap: '8px',
-                    alignItems: 'flex-start',
-                  }}
-                >
-                  <AlertCircle size={16} style={{ flexShrink: 0, marginTop: '2px' }} />
-                  <div style={{ flex: 1, whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>
-                    {msg.content}
-                  </div>
-                </div>
-              );
-            }
-
-            return (
-              <div
-                key={msg.id}
-                style={{
-                  alignSelf: 'flex-start',
-                  width: '100%',
-                  background: 'var(--bg)',
-                  border: '1px solid var(--border)',
-                  borderRadius: '8px 8px 8px 2px',
-                  padding: '10px 12px',
-                  boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
-                }}
-              >
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    marginBottom: '6px',
-                  }}
-                >
-                  <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--muted)' }}>
-                    AI Response
-                  </span>
-                  {msg.content && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <button
-                        onClick={() => handleCopyMessage(msg.id, msg.content)}
-                        title="Copy response"
-                        style={{
-                          background: 'transparent',
-                          border: 'none',
-                          color: copiedId === msg.id ? '#22c55e' : 'var(--muted)',
-                          cursor: 'pointer',
-                          padding: '2px 4px',
-                          borderRadius: '4px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '3px',
-                          fontSize: '11px',
-                        }}
-                      >
-                        {copiedId === msg.id ? <Check size={12} /> : <Copy size={12} />}
-                        <span>{copiedId === msg.id ? 'Copied' : 'Copy'}</span>
-                      </button>
-                    </div>
-                  )}
-                </div>
-
-                <ChatMarkdown content={msg.content || (aiLoading ? 'Thinking...' : '')} />
-
-                {/* Edit Output Action Toolbar: Replace Selection / Insert Below */}
-                {msg.isEditResult && msg.content && !aiLoading && (
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                      marginTop: '8px',
-                      paddingTop: '8px',
-                      borderTop: '1px solid var(--border)',
-                    }}
-                  >
-                    {msg.capturedSelection && (
-                      <button
-                        onClick={() => handleReplaceSelection(msg)}
-                        title="Replace original selection in note"
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '4px',
-                          padding: '4px 8px',
-                          borderRadius: '4px',
-                          border: '1px solid #e05438',
-                          background: 'rgba(224, 84, 56, 0.08)',
-                          color: '#e05438',
-                          fontSize: '11.5px',
-                          fontWeight: 500,
-                          cursor: 'pointer',
-                        }}
-                      >
-                        <RefreshCw size={11} />
-                        <span>
-                          {appliedActionMsg?.id === msg.id && appliedActionMsg.action === 'Replaced'
-                            ? 'Replaced!'
-                            : 'Replace selection'}
-                        </span>
-                      </button>
-                    )}
-                    <button
-                      onClick={() => handleInsertBelow(msg)}
-                      title="Insert text below current cursor or selection"
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '4px',
-                        padding: '4px 8px',
-                        borderRadius: '4px',
-                        border: '1px solid var(--border)',
-                        background: 'var(--surface)',
-                        color: 'var(--fg)',
-                        fontSize: '11.5px',
-                        fontWeight: 500,
-                        cursor: 'pointer',
-                      }}
-                    >
-                      <CornerDownRight size={11} />
-                      <span>
-                        {appliedActionMsg?.id === msg.id && appliedActionMsg.action === 'Inserted'
-                          ? 'Inserted!'
-                          : 'Insert below'}
-                      </span>
-                    </button>
-                  </div>
-                )}
-
-                {msg.metaText && (
-                  <div
-                    style={{
-                      fontSize: '10.5px',
-                      color: 'var(--muted)',
-                      marginTop: '6px',
-                      paddingTop: '6px',
-                      borderTop: '1px solid var(--border)',
-                      opacity: 0.85,
-                    }}
-                  >
-                    {msg.metaText}
-                  </div>
-                )}
-              </div>
-            );
-          })}
+          {wakingServer && (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '6px 10px',
+                borderRadius: '6px',
+                background: 'rgba(234, 179, 8, 0.12)',
+                border: '1px solid rgba(234, 179, 8, 0.35)',
+                color: '#b45309',
+                fontSize: '11.5px',
+              }}
+            >
+              <span>⏳ Waking the server (free tier, up to ~1 min)…</span>
+            </div>
+          )}
 
           {aiLoading && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '4px 0' }}>
@@ -1202,6 +1378,30 @@ export const NoteAIPanel: React.FC<NoteAIPanelProps> = ({
           >
             <span>Selection · {selection.words} words</span>
             <span style={{ fontSize: '10px', opacity: 0.8 }}>Target for edit actions</span>
+          </div>
+        )}
+
+        {/* Full note warning in edit mode or when full note selected */}
+        {effectiveRoute.note === 'full' && (
+          <div
+            style={{
+              padding: '4px 8px',
+              borderRadius: '6px',
+              background: noteTotalTokens > 6000 ? 'rgba(234, 179, 8, 0.12)' : 'rgba(224, 84, 56, 0.08)',
+              border: `1px solid ${noteTotalTokens > 6000 ? 'rgba(234, 179, 8, 0.35)' : 'rgba(224, 84, 56, 0.25)'}`,
+              fontSize: '11px',
+              color: noteTotalTokens > 6000 ? '#b45309' : '#e05438',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+            }}
+          >
+            <span>Full note: ~{noteTotalTokens} tokens</span>
+            {noteTotalTokens > 6000 && (
+              <span style={{ fontWeight: 500 }}>
+                ⚠️ Output is capped by max_tokens.
+              </span>
+            )}
           </div>
         )}
 

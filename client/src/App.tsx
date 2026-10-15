@@ -52,6 +52,14 @@ function App() {
     document.documentElement.setAttribute('data-theme', theme);
   }, [theme]);
 
+  // Ping backend on app load (wakes Render free tier if sleeping)
+  useEffect(() => {
+    const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+    fetch(`${apiBase}/api/health`).catch(() => {
+      // Backend may be waking up; subsequent calls will handle retries
+    });
+  }, []);
+
   useEffect(() => {
     if (token) {
       syncSettings();

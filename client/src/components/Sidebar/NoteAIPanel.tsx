@@ -1,9 +1,10 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import {
   Sparkles, X, Send, Wand2, Check, Scissors, Plus, Palette, Globe,
-  Copy, AlertCircle, StopCircle, ChevronDown, Layers
+  Copy, AlertCircle, StopCircle, ChevronDown, Layers, CornerDownRight, RefreshCw
 } from 'lucide-react';
 import { useSettingsStore } from '../../stores/settingsStore';
+import { useChatStore } from '../../stores/chatStore';
 import { BUILTIN_PROVIDERS, isBuiltinProvider, type BuiltinProvider } from '../../lib/providerConfig';
 import { AI_URL } from '../../lib/constants';
 import { ChatMarkdown } from '../Markdown/ChatMarkdown';
@@ -36,6 +37,8 @@ export interface PanelMessage {
   isError?: boolean;
   timestamp?: number;
   metaText?: string;
+  isEditResult?: boolean;
+  capturedSelection?: { text: string; from: number; to: number } | null;
 }
 
 export const NoteAIPanel: React.FC<NoteAIPanelProps> = ({
@@ -46,18 +49,77 @@ export const NoteAIPanel: React.FC<NoteAIPanelProps> = ({
   onClose,
 }) => {
   const { activeProvider, providerKeys, customProviders, getProviderModel } = useSettingsStore();
+  const { getNoteConversation, saveNoteMessages } = useChatStore();
 
   const [aiTab, setAiTab] = useState<'Chat' | 'Edit'>('Edit');
   const [aiPrompt, setAiPrompt] = useState('');
   const [aiLoading, setAiLoading] = useState(false);
-  const [messages, setMessages] = useState<PanelMessage[]>([
-    {
-      id: 'welcome',
-      role: 'assistant',
-      content: 'I can help you write, refine, or analyze this document. Select text or choose an action below.',
-    },
-  ]);
+  const [messages, setMessages] = useState<PanelMessage[]>(() => {
+    if (noteId && noteId !== 'new') {
+      const existing = useChatStore.getState().getNoteConversation(noteId);
+      if (existing && existing.messages.length > 0) {
+        return existing.messages.map((m, idx) => ({
+          id: `restored_${idx}_${m.timestamp}`,
+          role: m.role,
+          content: m.content,
+          timestamp: m.timestamp,
+        }));
+      }
+    }
+    return [
+      {
+        id: 'welcome',
+        role: 'assistant',
+        content: 'I can help you write, refine, or analyze this document. Select text or choose an action below.',
+      },
+    ];
+  });
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [appliedActionMsg, setAppliedActionMsg] = useState<{ id: string; action: string } | null>(null);
+
+  // Restore persisted per-note thread when noteId changes
+  useEffect(() => {
+    if (!noteId || noteId === 'new') return;
+    const timer = setTimeout(() => {
+      const existing = getNoteConversation(noteId);
+      if (existing && existing.messages.length > 0) {
+        const restored: PanelMessage[] = existing.messages.map((m, idx) => ({
+          id: `restored_${idx}_${m.timestamp}`,
+          role: m.role,
+          content: m.content,
+          timestamp: m.timestamp,
+        }));
+        setMessages(restored);
+      } else {
+        setMessages([
+          {
+            id: 'welcome',
+            role: 'assistant',
+            content: 'I can help you write, refine, or analyze this document. Select text or choose an action below.',
+          },
+        ]);
+      }
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [noteId, getNoteConversation]);
+
+  // Persist per-note thread updates (capped at 40 messages)
+  useEffect(() => {
+    if (!noteId || noteId === 'new' || aiLoading) return;
+    const valid = messages.filter(m => !m.isError && m.id !== 'welcome');
+    if (valid.length > 0) {
+      saveNoteMessages(
+        noteId,
+        valid.map(m => ({
+          role: m.role,
+          content: m.content,
+          timestamp: m.timestamp || Date.now(),
+        })),
+        activeProvider,
+        getProviderModel(activeProvider)
+      );
+    }
+  }, [messages, aiLoading, noteId, saveNoteMessages, activeProvider, getProviderModel]);
 
   // Context router & chip override state
   const [noteOverride, setNoteOverride] = useState<'auto' | NoteContextMode>('auto');
@@ -223,10 +285,62 @@ export const NoteAIPanel: React.FC<NoteAIPanelProps> = ({
     return tokens;
   }, [effectiveRoute, selection, noteTotalTokens, compactMd, aiPrompt]);
 
+  // Edit action handlers: Replace Selection & Insert Below
+  const handleReplaceSelection = useCallback(async (msg: PanelMessage) => {
+    if (!editorInstance || !msg.capturedSelection) return;
+    const currentDocText = editorInstance.state.doc.textBetween(
+      msg.capturedSelection.from,
+      msg.capturedSelection.to,
+      ' '
+    );
+
+    // Verify selection still matches
+    if (currentDocText !== msg.capturedSelection.text) {
+      alert('The selection in your note changed since this edit was generated. Please re-select or use "Insert below".');
+      return;
+    }
+
+    try {
+      const { marked } = await import('marked');
+      const html = await marked.parse(msg.content);
+      editorInstance
+        .chain()
+        .focus()
+        .setTextSelection({ from: msg.capturedSelection.from, to: msg.capturedSelection.to })
+        .deleteRange({ from: msg.capturedSelection.from, to: msg.capturedSelection.to })
+        .insertContent(html)
+        .run();
+      setAppliedActionMsg({ id: msg.id, action: 'Replaced' });
+      setTimeout(() => setAppliedActionMsg(null), 2500);
+    } catch {
+      // ignore
+    }
+  }, [editorInstance]);
+
+  const handleInsertBelow = useCallback(async (msg: PanelMessage) => {
+    if (!editorInstance) return;
+    try {
+      const { marked } = await import('marked');
+      const html = await marked.parse(msg.content);
+      const targetPos = msg.capturedSelection?.to ?? editorInstance.state.selection.to;
+      editorInstance
+        .chain()
+        .focus()
+        .setTextSelection(targetPos)
+        .insertContent('<p></p>' + html)
+        .run();
+      setAppliedActionMsg({ id: msg.id, action: 'Inserted' });
+      setTimeout(() => setAppliedActionMsg(null), 2500);
+    } catch {
+      // ignore
+    }
+  }, [editorInstance]);
+
   const executeAction = useCallback(async (actionLabel: string, promptInstruction: string) => {
     if (aiLoading) return;
 
     const currentSelection = getSelectionInfo();
+    const isEditMode = aiTab === 'Edit';
     const targetDescriptor = currentSelection
       ? `selection (${currentSelection.words} words)`
       : effectiveRoute.note === 'none'
@@ -312,7 +426,7 @@ export const NoteAIPanel: React.FC<NoteAIPanelProps> = ({
         .map(m => ({ role: m.role, content: m.content }));
 
       const builtMessages = buildMessages({
-        mode: aiTab === 'Edit' ? 'edit' : 'chat',
+        mode: isEditMode ? 'edit' : 'chat',
         question: promptInstruction,
         history: cleanHistory,
         context: {
@@ -345,7 +459,7 @@ export const NoteAIPanel: React.FC<NoteAIPanelProps> = ({
       } · ~${(estimatedInputTokens / 1000).toFixed(1)}k tokens in`;
 
       const modeParams = getModeParameters(
-        aiTab === 'Edit' ? 'edit' : 'chat',
+        isEditMode ? 'edit' : 'chat',
         estimatedInputTokens
       );
 
@@ -356,7 +470,7 @@ export const NoteAIPanel: React.FC<NoteAIPanelProps> = ({
         signal: controller.signal,
         body: JSON.stringify({
           messages: builtMessages,
-          mode: aiTab === 'Edit' ? 'edit' : 'chat',
+          mode: isEditMode ? 'edit' : 'chat',
           provider: isBuiltinProvider(providerToUse) ? providerToUse : 'custom',
           model: getProviderModel(providerToUse),
           api_key: effectiveKey,
@@ -389,6 +503,8 @@ export const NoteAIPanel: React.FC<NoteAIPanelProps> = ({
           content: '',
           metaText,
           timestamp: Date.now(),
+          isEditResult: isEditMode,
+          capturedSelection: currentSelection,
         },
       ]);
 
@@ -765,29 +881,96 @@ export const NoteAIPanel: React.FC<NoteAIPanelProps> = ({
                     AI Response
                   </span>
                   {msg.content && (
-                    <button
-                      onClick={() => handleCopyMessage(msg.id, msg.content)}
-                      title="Copy response"
-                      style={{
-                        background: 'transparent',
-                        border: 'none',
-                        color: copiedId === msg.id ? '#22c55e' : 'var(--muted)',
-                        cursor: 'pointer',
-                        padding: '2px 4px',
-                        borderRadius: '4px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '3px',
-                        fontSize: '11px',
-                      }}
-                    >
-                      {copiedId === msg.id ? <Check size={12} /> : <Copy size={12} />}
-                      <span>{copiedId === msg.id ? 'Copied' : 'Copy'}</span>
-                    </button>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <button
+                        onClick={() => handleCopyMessage(msg.id, msg.content)}
+                        title="Copy response"
+                        style={{
+                          background: 'transparent',
+                          border: 'none',
+                          color: copiedId === msg.id ? '#22c55e' : 'var(--muted)',
+                          cursor: 'pointer',
+                          padding: '2px 4px',
+                          borderRadius: '4px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '3px',
+                          fontSize: '11px',
+                        }}
+                      >
+                        {copiedId === msg.id ? <Check size={12} /> : <Copy size={12} />}
+                        <span>{copiedId === msg.id ? 'Copied' : 'Copy'}</span>
+                      </button>
+                    </div>
                   )}
                 </div>
 
                 <ChatMarkdown content={msg.content || (aiLoading ? 'Thinking...' : '')} />
+
+                {/* Edit Output Action Toolbar: Replace Selection / Insert Below */}
+                {msg.isEditResult && msg.content && !aiLoading && (
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      marginTop: '8px',
+                      paddingTop: '8px',
+                      borderTop: '1px solid var(--border)',
+                    }}
+                  >
+                    {msg.capturedSelection && (
+                      <button
+                        onClick={() => handleReplaceSelection(msg)}
+                        title="Replace original selection in note"
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          padding: '4px 8px',
+                          borderRadius: '4px',
+                          border: '1px solid #e05438',
+                          background: 'rgba(224, 84, 56, 0.08)',
+                          color: '#e05438',
+                          fontSize: '11.5px',
+                          fontWeight: 500,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <RefreshCw size={11} />
+                        <span>
+                          {appliedActionMsg?.id === msg.id && appliedActionMsg.action === 'Replaced'
+                            ? 'Replaced!'
+                            : 'Replace selection'}
+                        </span>
+                      </button>
+                    )}
+                    <button
+                      onClick={() => handleInsertBelow(msg)}
+                      title="Insert text below current cursor or selection"
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        padding: '4px 8px',
+                        borderRadius: '4px',
+                        border: '1px solid var(--border)',
+                        background: 'var(--surface)',
+                        color: 'var(--fg)',
+                        fontSize: '11.5px',
+                        fontWeight: 500,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <CornerDownRight size={11} />
+                      <span>
+                        {appliedActionMsg?.id === msg.id && appliedActionMsg.action === 'Inserted'
+                          ? 'Inserted!'
+                          : 'Insert below'}
+                      </span>
+                    </button>
+                  </div>
+                )}
 
                 {msg.metaText && (
                   <div

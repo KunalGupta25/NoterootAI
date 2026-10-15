@@ -15,15 +15,18 @@ export interface ChatConversation {
   messages: ChatMessage[];
   createdAt: number;
   updatedAt: number;
+  noteId?: string;
 }
 
 interface ChatStore {
   conversations: ChatConversation[];
   activeId: string | null;
 
-  createConversation: (provider: string, model: string) => string;
+  createConversation: (provider: string, model: string, noteId?: string) => string;
   setActiveId: (id: string | null) => void;
   getActive: () => ChatConversation | undefined;
+  getNoteConversation: (noteId: string) => ChatConversation | undefined;
+  saveNoteMessages: (noteId: string, messages: ChatMessage[], provider?: string, model?: string) => void;
   addMessage: (id: string, message: ChatMessage) => void;
   updateLastMessage: (id: string, content: string) => void;
   clearConversation: (id: string) => void;
@@ -37,7 +40,7 @@ export const useChatStore = create<ChatStore>()(
       conversations: [],
       activeId: null,
 
-      createConversation: (provider, model) => {
+      createConversation: (provider, model, noteId) => {
         const id = `chat_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
         const convo: ChatConversation = {
           id,
@@ -47,6 +50,7 @@ export const useChatStore = create<ChatStore>()(
           messages: [],
           createdAt: Date.now(),
           updatedAt: Date.now(),
+          noteId,
         };
         set((s) => ({ conversations: [convo, ...s.conversations], activeId: id }));
         return id;
@@ -57,6 +61,39 @@ export const useChatStore = create<ChatStore>()(
       getActive: () => {
         const { conversations, activeId } = get();
         return conversations.find((c) => c.id === activeId);
+      },
+
+      getNoteConversation: (noteId: string) => {
+        const { conversations } = get();
+        return conversations.find((c) => c.noteId === noteId);
+      },
+
+      saveNoteMessages: (noteId: string, messages: ChatMessage[], provider = 'openai', model = 'gpt-4o-mini') => {
+        const cappedMessages = messages.slice(-40);
+        set((s) => {
+          const existing = s.conversations.find((c) => c.noteId === noteId);
+          if (existing) {
+            return {
+              conversations: s.conversations.map((c) =>
+                c.noteId === noteId
+                  ? { ...c, messages: cappedMessages, updatedAt: Date.now() }
+                  : c
+              ),
+            };
+          }
+          const id = `note_chat_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+          const convo: ChatConversation = {
+            id,
+            title: `Note Conversation`,
+            provider,
+            model,
+            messages: cappedMessages,
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+            noteId,
+          };
+          return { conversations: [convo, ...s.conversations] };
+        });
       },
 
       addMessage: (id, message) =>

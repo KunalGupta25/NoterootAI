@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useAuthStore } from '../stores/authStore';
 import { useNoteStore } from '../stores/noteStore';
@@ -22,6 +22,10 @@ type SettingsTab =
   | 'plugins';
 
 export default function SettingsPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const urlTab = searchParams.get('tab') as SettingsTab | null;
+  const validTabs: SettingsTab[] = ['general', 'appearance', 'ai', 'editor', 'storage', 'plugins'];
+
   const { user } = useAuthStore();
   const { notes, syncStatus } = useNoteStore();
   const {
@@ -33,7 +37,20 @@ export default function SettingsPage() {
     customProviders, addCustomProvider, updateCustomProvider, removeCustomProvider,
   } = useSettingsStore();
 
-  const [activeTab, setActiveTab] = useState<SettingsTab>('general');
+  const [activeTab, setActiveTab] = useState<SettingsTab>(
+    urlTab && validTabs.includes(urlTab) ? urlTab : 'general'
+  );
+
+  useEffect(() => {
+    if (urlTab && validTabs.includes(urlTab)) {
+      setActiveTab(urlTab);
+    }
+  }, [urlTab]);
+
+  const handleSelectTab = (tab: SettingsTab) => {
+    setActiveTab(tab);
+    setSearchParams({ tab });
+  };
 
   // Form states for General tab
   const [name, setName] = useState(user?.name || 'Kunal Gupta');
@@ -246,7 +263,7 @@ export default function SettingsPage() {
             return (
               <button
                 key={item.id}
-                onClick={() => setActiveTab(item.id)}
+                onClick={() => handleSelectTab(item.id)}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -1220,6 +1237,49 @@ export default function SettingsPage() {
                     </button>
                   </div>
                 </div>
+
+                {/* Cloud & Drive Storage Integrations */}
+                <div style={{ marginTop: '8px' }}>
+                  <PluginSettingsPanels />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── PLUGINS TAB ── */}
+          {activeTab === 'plugins' && (
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                <div>
+                  <h2 style={{ fontSize: '16px', fontWeight: 600, margin: '0 0 4px 0', color: 'var(--fg)' }}>
+                    Plugin Settings & Integrations
+                  </h2>
+                  <p style={{ fontSize: '13px', color: 'var(--muted)', margin: 0 }}>
+                    Configure installed plugins, cloud backups, and custom extensions.
+                  </p>
+                </div>
+                <Link
+                  to="/plugins"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    fontSize: '12.5px',
+                    color: '#e05438',
+                    textDecoration: 'none',
+                    fontWeight: 500,
+                    padding: '6px 12px',
+                    borderRadius: '6px',
+                    background: 'rgba(224, 84, 56, 0.08)',
+                    border: '1px solid rgba(224, 84, 56, 0.2)',
+                  }}
+                >
+                  <Puzzle size={14} /> Plugins Marketplace ↗
+                </Link>
+              </div>
+
+              <div style={{ marginTop: '20px' }}>
+                <PluginSettingsPanels />
               </div>
             </div>
           )}

@@ -64,13 +64,16 @@ function App() {
   }, []);
 
   useEffect(() => {
+    if (!isLoaded) {
+      initPlugins();
+    }
+  }, [isLoaded, initPlugins]);
+
+  useEffect(() => {
     if (token) {
       syncSettings();
-      if (!isLoaded) {
-        initPlugins();
-      }
     }
-  }, [token, syncSettings, isLoaded, initPlugins]);
+  }, [token, syncSettings]);
 
   // Init PluginRuntime once plugins are loaded from storage
   useEffect(() => {

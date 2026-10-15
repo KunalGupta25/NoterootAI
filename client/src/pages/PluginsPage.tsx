@@ -1,8 +1,10 @@
 import { useState, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import { usePluginStore } from '../stores/pluginStore';
 import {
   Puzzle, Search, FileText, Globe,
-  BookOpen, Video, Upload, CheckCircle2, X, Cloud
+  BookOpen, Video, Upload, CheckCircle2, X, Cloud,
+  Settings as SettingsIcon, Trash2
 } from 'lucide-react';
 import { DRIVE_CONNECTOR_CODE } from '../plugins/custom/driveConnectorCode';
 
@@ -336,25 +338,63 @@ export default function PluginsPage() {
                 </div>
 
                 {/* Action Install Button matching Mockup */}
-                <button
-                  onClick={() => handleToggleInstall(plugin)}
-                  style={{
-                    marginLeft: '16px',
-                    padding: '6px 16px',
-                    borderRadius: '6px',
-                    border: isInstalled ? '1px solid var(--border)' : 'none',
-                    background: isInstalled ? 'var(--surface-2)' : '#e05438',
-                    color: isInstalled ? 'var(--fg)' : '#ffffff',
-                    fontSize: '13px',
-                    fontWeight: 500,
-                    cursor: 'pointer',
-                    boxShadow: isInstalled ? 'none' : '0 1px 3px rgba(224, 84, 56, 0.3)',
-                    transition: 'all 0.12s',
-                    flexShrink: 0,
-                  }}
-                >
-                  {isInstalled ? 'Installed' : 'Install'}
-                </button>
+                {isInstalled ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginLeft: '16px', flexShrink: 0 }}>
+                    <Link
+                      to="/settings?tab=plugins"
+                      style={{
+                        padding: '6px 12px',
+                        borderRadius: '6px',
+                        border: '1px solid var(--border)',
+                        background: 'var(--surface-2)',
+                        color: 'var(--fg)',
+                        fontSize: '12.5px',
+                        fontWeight: 500,
+                        textDecoration: 'none',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '5px',
+                      }}
+                    >
+                      <SettingsIcon size={13} /> Settings
+                    </Link>
+                    <button
+                      onClick={() => handleToggleInstall(plugin)}
+                      style={{
+                        padding: '6px 10px',
+                        borderRadius: '6px',
+                        border: '1px solid var(--border)',
+                        background: 'transparent',
+                        color: 'var(--muted)',
+                        fontSize: '12px',
+                        fontWeight: 500,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Uninstall
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => handleToggleInstall(plugin)}
+                    style={{
+                      marginLeft: '16px',
+                      padding: '6px 16px',
+                      borderRadius: '6px',
+                      border: 'none',
+                      background: '#e05438',
+                      color: '#ffffff',
+                      fontSize: '13px',
+                      fontWeight: 500,
+                      cursor: 'pointer',
+                      boxShadow: '0 1px 3px rgba(224, 84, 56, 0.3)',
+                      transition: 'all 0.12s',
+                      flexShrink: 0,
+                    }}
+                  >
+                    Install
+                  </button>
+                )}
               </div>
             );
           })}
@@ -392,7 +432,7 @@ export default function PluginsPage() {
               },
             }[p.id];
 
-            const displayName = builtinInfo?.name || p.id.replace('core-', '').replace(/-/g, ' ');
+            const displayName = builtinInfo?.name || (p.id === 'drive-connector' ? 'Drive Connector' : p.id.replace('core-', '').replace(/-/g, ' '));
             const description = builtinInfo?.description || (p.readme ? p.readme.slice(0, 100) : 'Custom plugin');
 
             return (
@@ -422,7 +462,7 @@ export default function PluginsPage() {
                     flexShrink: 0,
                   }}
                 >
-                  {builtinInfo ? builtinInfo.icon : <Puzzle size={20} />}
+                  {builtinInfo ? builtinInfo.icon : (p.id === 'drive-connector' ? <Cloud size={20} color="#2563eb" /> : <Puzzle size={20} />)}
                 </div>
 
                 <div style={{ flex: 1, minWidth: 0 }}>
@@ -448,23 +488,66 @@ export default function PluginsPage() {
                   </div>
                 </div>
 
-                <button
-                  onClick={() => togglePlugin(p.id, !p.enabled)}
-                  style={{
-                    padding: '6px 14px',
-                    borderRadius: '6px',
-                    border: '1px solid var(--border)',
-                    background: p.enabled ? '#22c55e' : 'var(--surface-2)',
-                    color: p.enabled ? '#ffffff' : 'var(--muted)',
-                    fontSize: '12px',
-                    fontWeight: 500,
-                    cursor: 'pointer',
-                    transition: 'all 0.15s ease',
-                    flexShrink: 0,
-                  }}
-                >
-                  {p.enabled ? 'Enabled' : 'Disabled'}
-                </button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+                  <Link
+                    to="/settings?tab=plugins"
+                    style={{
+                      padding: '6px 12px',
+                      borderRadius: '6px',
+                      border: '1px solid var(--border)',
+                      background: 'var(--surface-2)',
+                      color: 'var(--fg)',
+                      fontSize: '12px',
+                      fontWeight: 500,
+                      textDecoration: 'none',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                    }}
+                  >
+                    <SettingsIcon size={12} /> Settings
+                  </Link>
+
+                  <button
+                    onClick={() => togglePlugin(p.id, !p.enabled)}
+                    style={{
+                      padding: '6px 14px',
+                      borderRadius: '6px',
+                      border: '1px solid var(--border)',
+                      background: p.enabled ? '#22c55e' : 'var(--surface-2)',
+                      color: p.enabled ? '#ffffff' : 'var(--muted)',
+                      fontSize: '12px',
+                      fontWeight: 500,
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease',
+                    }}
+                  >
+                    {p.enabled ? 'Enabled' : 'Disabled'}
+                  </button>
+
+                  {p.source === 'community' && (
+                    <button
+                      onClick={() => removePlugin(p.id)}
+                      title="Uninstall plugin"
+                      style={{
+                        padding: '6px 8px',
+                        borderRadius: '6px',
+                        border: '1px solid var(--border)',
+                        background: 'transparent',
+                        color: 'var(--muted)',
+                        fontSize: '12px',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                      onMouseEnter={e => (e.currentTarget.style.color = '#ef4444')}
+                      onMouseLeave={e => (e.currentTarget.style.color = 'var(--muted)')}
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  )}
+                </div>
               </div>
             );
           })}

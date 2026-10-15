@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import localforage from 'localforage';
 import PluginRuntime from '../plugins/runtime/PluginRuntime';
 import { useSettingsStore } from './settingsStore';
+import { DRIVE_CONNECTOR_CODE } from '../plugins/custom/driveConnectorCode';
 
 export interface InstalledPlugin {
   id: string;
@@ -42,6 +43,19 @@ export const usePluginStore = create<PluginStore>((set, get) => ({
       }
     }
 
+    // Auto-repair any drive-connector entry that was saved with empty or missing code
+    pluginsToLoad = pluginsToLoad.map(p => {
+      if ((p.id === 'drive-connector' || p.id.includes('drive-connector')) && (!p.code || p.code.trim() === '')) {
+        return {
+          ...p,
+          code: DRIVE_CONNECTOR_CODE,
+          enabled: true,
+          readme: p.readme || 'Connect your Google Drive to automatically create backups for all your notes.'
+        };
+      }
+      return p;
+    });
+
     await localforage.setItem('installed_plugins', pluginsToLoad);
     set({ plugins: pluginsToLoad });
     set({ isLoaded: true });
@@ -50,6 +64,9 @@ export const usePluginStore = create<PluginStore>((set, get) => ({
   },
 
   installPlugin: async (plugin) => {
+    if ((plugin.id === 'drive-connector' || plugin.id.includes('drive-connector')) && (!plugin.code || plugin.code.trim() === '')) {
+      plugin.code = DRIVE_CONNECTOR_CODE;
+    }
     const newPlugins = [...get().plugins.filter(p => p.id !== plugin.id), plugin];
     set({ plugins: newPlugins });
     await localforage.setItem('installed_plugins', newPlugins);
@@ -101,21 +118,9 @@ export const usePluginStore = create<PluginStore>((set, get) => ({
     set({ plugins: newPlugins });
     await localforage.setItem('installed_plugins', newPlugins);
     
-    if (enabled) {
-      const plugin = newPlugins.find(p => p.id === id);
-      if (plugin) {
-         if (plugin.source === 'builtin') {
-           // We can't execute builtin here easily as its code isn't in state.
-           // It's better handled by App.tsx reloading or dynamic importing.
-           // For now, reloading the page is the safest way to re-init builtin plugins
-           window.location.reload();
-         } else {
-           PluginRuntime.executePlugin(plugin);
-         }
-      }
-    } else {
-      PluginRuntime.disablePlugin(id);
-    }
+    // Always trigger page reload on enable/disable so all extension points, 
+    // tab headers, modals, and settings panels synchronize cleanly
+    window.location.reload();
   },
 
   removePlugin: async (id) => {
@@ -130,5 +135,7 @@ export const usePluginStore = create<PluginStore>((set, get) => ({
     // Sync URLs
     const urls = newPlugins.filter(p => p.source === 'community' && p.url).map(p => p.url!);
     useSettingsStore.getState().setInstalledCommunityPlugins(urls);
+
+    window.location.reload();
   }
 }));

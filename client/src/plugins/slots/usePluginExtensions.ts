@@ -7,7 +7,7 @@ import type { ExtensionPoint } from '../runtime/ExtensionPoints';
  * It forces a re-render whenever plugins register or unregister extensions.
  */
 export function usePluginExtensions<T>(point: ExtensionPoint): T[] {
-  const [extensions, setExtensions] = useState<T[]>([]);
+  const [extensions, setExtensions] = useState<T[]>(() => PluginRuntime.getExtensions<T>(point));
 
   useEffect(() => {
     // Initial fetch

@@ -4,7 +4,8 @@ import { usePluginExtensions } from './usePluginExtensions';
 import type { SettingsPanel } from '../runtime/ExtensionPoints';
 import { DescriptorRenderer } from '../runtime/DescriptorRenderer';
 import { useSettingsStore } from '../../stores/settingsStore';
-import { Puzzle, ArrowRight } from 'lucide-react';
+import PluginRuntime from '../runtime/PluginRuntime';
+import { Puzzle, ArrowRight, AlertTriangle } from 'lucide-react';
 
 export function PluginSettingsPanels() {
   const panels = usePluginExtensions<SettingsPanel>('settings.panels');
@@ -23,9 +24,20 @@ export function PluginSettingsPanels() {
     };
   }, []);
 
+  const errors = Array.from(PluginRuntime.pluginErrors.entries());
+
   if (panels.length === 0) {
     return (
       <section style={{ padding: '28px', borderRadius: '12px', border: '1px dashed var(--border)', background: 'var(--surface)', textAlign: 'center' }}>
+        {errors.length > 0 && (
+          <div style={{ marginBottom: '16px', textAlign: 'left' }}>
+            {errors.map(([pId, err]) => (
+              <div key={pId} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 14px', borderRadius: '8px', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', color: '#ef4444', fontSize: '13px' }}>
+                <AlertTriangle size={16} /> <span><strong>Plugin Error ({pId}):</strong> {err}</span>
+              </div>
+            ))}
+          </div>
+        )}
         <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: 'rgba(224, 84, 56, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px', color: '#e05438' }}>
           <Puzzle size={20} />
         </div>
@@ -56,6 +68,15 @@ export function PluginSettingsPanels() {
 
   return (
     <section style={{ padding: '24px', borderRadius: '12px', border: '1px solid var(--border)', background: 'var(--surface)' }}>
+      {errors.length > 0 && (
+        <div style={{ marginBottom: '16px' }}>
+          {errors.map(([pId, err]) => (
+            <div key={pId} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 14px', borderRadius: '8px', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', color: '#ef4444', fontSize: '13px', marginBottom: '8px' }}>
+              <AlertTriangle size={16} /> <span><strong>Plugin Error ({pId}):</strong> {err}</span>
+            </div>
+          ))}
+        </div>
+      )}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
         <h2 style={{ fontSize: '16px', fontWeight: 600, margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
           <Puzzle size={16} /> Plugin Settings

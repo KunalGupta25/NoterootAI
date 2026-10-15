@@ -96,6 +96,7 @@ export default function PluginsPage() {
         code: plugin.code,
         readme: plugin.description,
       });
+      window.location.reload();
     }
   };
 
@@ -113,15 +114,53 @@ export default function PluginsPage() {
   const handleInstallUpload = async () => {
     if (!uploadedFile) return;
     try {
-      const pluginId = uploadedFile.name.replace(/\.[^/.]+$/, '').toLowerCase().replace(/[^a-z0-9_-]/g, '-');
+      let pluginId = uploadedFile.name.replace(/\.[^/.]+$/, '').toLowerCase().replace(/[^a-z0-9_-]/g, '-');
       let code = '';
       let readme = `Installed from local file: ${uploadedFile.name}`;
 
       if (uploadedFile.name.endsWith('.js')) {
         code = await uploadedFile.text();
+      } else if (uploadedFile.name.endsWith('.zip')) {
+        const JSZip = (await import('jszip')).default;
+        const zip = await JSZip.loadAsync(uploadedFile);
+
+        // Find JavaScript entry (e.g. drive-connector/plugin.js or plugin.js)
+        const jsFile = Object.values(zip.files).find(f => !f.dir && f.name.endsWith('plugin.js')) ||
+                       Object.values(zip.files).find(f => !f.dir && f.name.endsWith('.js'));
+        if (jsFile) {
+          code = await jsFile.async('text');
+        }
+
+        // Find README.md and parse plugin title
+        const readmeFile = Object.values(zip.files).find(f => !f.dir && f.name.toLowerCase().endsWith('readme.md'));
+        if (readmeFile) {
+          readme = await readmeFile.async('text');
+          const match = readme.match(/^---\n([\s\S]+?)\n---/);
+          if (match) {
+            match[1].split('\n').forEach(line => {
+              const [key, ...rest] = line.split(':');
+              if (key.trim() === 'name') {
+                const nameVal = rest.join(':').trim().replace(/^['"]|['"]$/g, '');
+                pluginId = nameVal.toLowerCase().replace(/[^a-z0-9_-]/g, '-');
+              }
+            });
+          }
+        }
       } else if (uploadedFile.name.endsWith('.json')) {
         const text = await uploadedFile.text();
         readme = `Local configuration/manifest:\n\`\`\`json\n${text}\n\`\`\``;
+      }
+
+      // If code was not found or if it's drive connector, fallback to bundled DRIVE_CONNECTOR_CODE
+      if ((!code || code.trim() === '') && (pluginId.includes('drive') || uploadedFile.name.includes('drive'))) {
+        code = DRIVE_CONNECTOR_CODE;
+        pluginId = 'drive-connector';
+      }
+
+      if (!code || code.trim() === '') {
+        alert('Could not find executable plugin.js in the uploaded file.');
+        setUploadStatus('error');
+        return;
       }
 
       await installPlugin({
@@ -131,8 +170,11 @@ export default function PluginsPage() {
         code,
         readme,
       });
+
       setUploadStatus('success');
-      setTimeout(() => { setUploadedFile(null); setUploadStatus('idle'); }, 2500);
+      setTimeout(() => {
+        window.location.reload();
+      }, 600);
     } catch (err) {
       console.error('Failed to install uploaded plugin:', err);
       setUploadStatus('error');

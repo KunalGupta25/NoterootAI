@@ -24,9 +24,11 @@ export function PluginSettingsPanels() {
     };
   }, []);
 
-  const errors = Array.from(PluginRuntime.pluginErrors.entries());
+  // Deduplicate panels by ID so each panel renders only once
+  const uniquePanels = Array.from(new Map(panels.map(p => [p.id, p])).values());
+  const errors: [string, string][] = Array.from(PluginRuntime.pluginErrors.entries());
 
-  if (panels.length === 0) {
+  if (uniquePanels.length === 0) {
     return (
       <section style={{ padding: '28px', borderRadius: '12px', border: '1px dashed var(--border)', background: 'var(--surface)', textAlign: 'center' }}>
         {errors.length > 0 && (
@@ -87,7 +89,7 @@ export function PluginSettingsPanels() {
       </p>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-        {panels.map((panel) => (
+        {uniquePanels.map((panel) => (
           <div key={panel.id} style={{ border: '1px solid var(--border)', borderRadius: '10px', background: 'var(--bg)', padding: '18px' }}>
             <h3 style={{ fontSize: '14px', fontWeight: 600, marginTop: 0, marginBottom: '14px', color: '#e05438' }}>
               {panel.pluginName}

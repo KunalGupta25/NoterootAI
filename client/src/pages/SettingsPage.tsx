@@ -1239,8 +1239,26 @@ export default function SettingsPage() {
                 </div>
 
                 {/* Cloud & Drive Storage Integrations */}
-                <div style={{ marginTop: '8px' }}>
-                  <PluginSettingsPanels />
+                <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '8px', padding: '16px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div>
+                    <div style={{ fontSize: '13px', color: 'var(--fg)', fontWeight: 500 }}>Google Drive Cloud Connector</div>
+                    <div style={{ fontSize: '12px', color: 'var(--muted)' }}>Manage automated backups and multi-account restore in Plugins Settings</div>
+                  </div>
+                  <button
+                    onClick={() => handleSelectTab('plugins')}
+                    style={{
+                      padding: '6px 14px',
+                      borderRadius: '6px',
+                      background: 'var(--surface-2)',
+                      border: '1px solid var(--border)',
+                      color: 'var(--fg)',
+                      fontSize: '12.5px',
+                      fontWeight: 500,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Open Drive Settings →
+                  </button>
                 </div>
               </div>
             </div>

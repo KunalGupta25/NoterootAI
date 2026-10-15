@@ -106,12 +106,19 @@ class PluginRuntimeManager {
    */
   public getExtensions<T = any>(point: ExtensionPoint): T[] {
     const all: T[] = [];
+    const seenIds = new Set<string>();
     if (this.extensions.has(point)) {
       for (const [_pluginId, descriptors] of this.extensions.get(point)!.entries()) {
-        if (Array.isArray(descriptors)) {
-          all.push(...descriptors);
-        } else {
-          all.push(descriptors);
+        const items = Array.isArray(descriptors) ? descriptors : [descriptors];
+        for (const item of items) {
+          if (item && item.id) {
+            if (!seenIds.has(item.id)) {
+              seenIds.add(item.id);
+              all.push(item);
+            }
+          } else {
+            all.push(item);
+          }
         }
       }
     }

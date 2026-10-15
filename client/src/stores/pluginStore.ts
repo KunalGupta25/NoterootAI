@@ -43,6 +43,22 @@ export const usePluginStore = create<PluginStore>((set, get) => ({
       }
     }
 
+    // Deduplicate any multiple drive-connector plugins in storage (e.g. 'plugin' from plugin.js and 'drive-connector')
+    const seenPluginIds = new Set<string>();
+    let hasDriveConnector = false;
+    pluginsToLoad = pluginsToLoad.filter(p => {
+      const isDrive = p.id === 'drive-connector' || p.id === 'plugin-drive-connector' || (p.id === 'plugin' && (p.readme?.includes('Drive') || p.code?.includes('Drive Connector')));
+      if (isDrive) {
+        if (hasDriveConnector) return false;
+        hasDriveConnector = true;
+        p.id = 'drive-connector';
+        p.code = DRIVE_CONNECTOR_CODE;
+      }
+      if (seenPluginIds.has(p.id)) return false;
+      seenPluginIds.add(p.id);
+      return true;
+    });
+
     // Auto-repair any drive-connector entry that was saved with empty or missing code
     pluginsToLoad = pluginsToLoad.map(p => {
       if ((p.id === 'drive-connector' || p.id.includes('drive-connector')) && (!p.code || p.code.trim() === '')) {

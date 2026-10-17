@@ -32,4 +32,11 @@ Keep credentials and local environment files out of Git. Configure database, AI-
 
 ## Skills
 
-- **noteroot-plugin** (`.opencode/skills/noteroot-plugin/SKILL.md`) — build, modify, and package NoteRoot plugins. Load it whenever the task involves `plugin.js`, `plugin-template/`, `sample-plugin/`, extension points, `ctx.*`, or the plugin runtime under `client/src/plugins/`.
+- **noteroot-plugin** (`skills/noteroot-plugin/SKILL.md`) — build, modify, and package NoteRoot plugins. Load it whenever the task involves `plugin.js`, `plugin-template/`, `sample-plugin/`, extension points, `ctx.*`, or the plugin runtime under `client/src/plugins/`.
+
+The skill follows the open agent-skills format, so any agent can install it:
+
+```sh
+npx skills add KunalGupta25/NoterootAI --skill noteroot-plugin        # project-level
+npx skills add KunalGupta25/NoterootAI --skill noteroot-plugin -g     # global
+```

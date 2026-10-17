@@ -15,7 +15,7 @@ main: plugin.js
 
 A production-shaped starting point for every NoteRoot plugin. Copy this folder, rename the id, and keep only the sections you need — everything works out of the box.
 
-> Building with an AI agent? The `noteroot-plugin` skill (`.opencode/skills/noteroot-plugin/`) drives the whole workflow. For a fully annotated tour of every extension point, read [`sample-plugin/`](../sample-plugin/).
+> Building with an AI agent? The `noteroot-plugin` skill (`skills/noteroot-plugin/`) drives the whole workflow — any agent can install it with `npx skills add KunalGupta25/NoterootAI --skill noteroot-plugin`. For a fully annotated tour of every extension point, read [`sample-plugin/`](../sample-plugin/).
 
 ---
 
@@ -84,4 +84,4 @@ The `@noteroot-plugin` header id is authoritative over the README `name` and the
 - Never hardcode API keys — use the `secret: true` Input (values live in the user's synced settings) or the app's provider config.
 - `ctx.ui.openUrl` only opens `http(s)` URLs; there is no in-app navigation API — plugin tabs and buttons cannot change routes.
 
-Full API reference: `.opencode/skills/noteroot-plugin/references/api.md`
+Full API reference: `skills/noteroot-plugin/references/api.md`

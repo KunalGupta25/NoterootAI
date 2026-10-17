@@ -128,6 +128,9 @@ export function DescriptorRenderer({ node }: Props): React.ReactElement | null {
     case 'Input':
       return (
         <input
+          type={node.secret ? 'password' : 'text'}
+          autoComplete="off"
+          spellCheck={false}
           value={node.value || ''}
           onChange={(e) => node.onChange(e.target.value)}
           placeholder={node.placeholder}
@@ -186,7 +189,7 @@ export function DescriptorRenderer({ node }: Props): React.ReactElement | null {
       return (
         <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px' }}>
           <input type="checkbox" checked={node.checked} onChange={(e) => node.onChange(e.target.checked)} />
-          Toggle
+          {node.label ?? 'Toggle'}
         </label>
       );
     case 'Divider':

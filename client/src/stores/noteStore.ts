@@ -28,7 +28,7 @@ interface NoteStore {
   notes: Note[];
   syncStatus: SyncStatus;
   initDB: () => Promise<void>;
-  saveNote: (note: Partial<Note>) => Promise<string>;
+  saveNote: (note: Partial<Note>, opts?: { preserveTimestamps?: boolean }) => Promise<string>;
   getNote: (id: string) => Promise<Note | undefined>;
   deleteNote: (id: string) => Promise<void>;
   getChildren: (parentId: string) => Note[];
@@ -139,7 +139,7 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
     setTimeout(() => get().syncWithCloud(), 2000);
   },
 
-  saveNote: async (noteData: Partial<Note>) => {
+  saveNote: async (noteData: Partial<Note>, opts?: { preserveTimestamps?: boolean }) => {
     set({ syncStatus: 'saving_locally' });
 
     const isNew = !noteData._id;
@@ -165,8 +165,12 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
         ...(noteData.properties || {}),
         space,
       },
-      updatedAt: Date.now(),
-      createdAt: currentNote?.createdAt ?? Date.now(),
+      // Only honor the caller's updatedAt when explicitly requested (plugin imports);
+      // normal saves must bump it so cloud merge/conflict resolution keeps working.
+      updatedAt: opts?.preserveTimestamps && typeof noteData.updatedAt === 'number'
+        ? noteData.updatedAt
+        : Date.now(),
+      createdAt: currentNote?.createdAt ?? noteData.createdAt ?? Date.now(),
       synced: false,
     };
 

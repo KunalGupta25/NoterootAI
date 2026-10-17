@@ -3,6 +3,7 @@ import localforage from 'localforage';
 import PluginRuntime from '../plugins/runtime/PluginRuntime';
 import { useSettingsStore } from './settingsStore';
 import { DRIVE_CONNECTOR_CODE } from '../plugins/custom/driveConnectorCode';
+import { parsePluginMeta } from '../plugins/runtime/pluginMeta';
 
 export interface InstalledPlugin {
   id: string;
@@ -46,18 +47,35 @@ export const usePluginStore = create<PluginStore>((set, get) => ({
     // Deduplicate any multiple drive-connector plugins in storage (e.g. 'plugin' from plugin.js and 'drive-connector')
     const seenPluginIds = new Set<string>();
     let hasDriveConnector = false;
+    const idRenames: Array<[string, string]> = [];
     pluginsToLoad = pluginsToLoad.filter(p => {
       const isDrive = p.id === 'drive-connector' || p.id === 'plugin-drive-connector' || (p.id === 'plugin' && (p.readme?.includes('Drive') || p.code?.includes('Drive Connector')));
       if (isDrive) {
         if (hasDriveConnector) return false;
         hasDriveConnector = true;
-        p.id = 'drive-connector';
-        p.code = DRIVE_CONNECTOR_CODE;
+        if (p.id !== 'drive-connector') {
+          idRenames.push([p.id, 'drive-connector']);
+          p.id = 'drive-connector';
+        }
       }
       if (seenPluginIds.has(p.id)) return false;
       seenPluginIds.add(p.id);
       return true;
     });
+
+    // Migrate plugin settings saved under a legacy id (e.g. 'plugin' from .js uploads)
+    if (idRenames.length > 0) {
+      const pluginSettings = { ...(useSettingsStore.getState().pluginSettings || {}) };
+      let changed = false;
+      for (const [from, to] of idRenames) {
+        if (pluginSettings[from]) {
+          if (!pluginSettings[to]) pluginSettings[to] = pluginSettings[from];
+          delete pluginSettings[from];
+          changed = true;
+        }
+      }
+      if (changed) useSettingsStore.setState({ pluginSettings });
+    }
 
     // Auto-repair any drive-connector entry that was saved with empty or missing code
     pluginsToLoad = pluginsToLoad.map(p => {
@@ -100,33 +118,36 @@ export const usePluginStore = create<PluginStore>((set, get) => ({
   },
 
   installFromUrl: async (url: string) => {
-    try {
-      let owner = ''; let repo = ''; let branch = 'main';
-      if (url.includes('github.com')) {
-        const parts = url.replace('https://github.com/', '').split('/');
-        owner = parts[0]; repo = parts[1];
-      } else return;
-      
-      const readmeRes = await fetch(`https://raw.githubusercontent.com/${owner}/${repo}/${branch}/README.md`);
-      const codeRes = await fetch(`https://raw.githubusercontent.com/${owner}/${repo}/${branch}/plugin.js`);
-      if (!readmeRes.ok || !codeRes.ok) return;
-      
-      const readmeText = await readmeRes.text();
-      const codeText = await codeRes.text();
-      
-      let name = repo;
-      const match = readmeText.match(/^---\n([\s\S]+?)\n---/);
-      if (match) {
-        match[1].split('\n').forEach(line => {
-          const [key, ...rest] = line.split(':');
-          if (key.trim() === 'name') name = rest.join(':').trim().replace(/^['"]|['"]$/g, '');
-        });
-      }
-      const id = `plugin-${name.replace(/\s+/g, '-').toLowerCase()}`;
-      await get().installPlugin({ id, source: 'community', enabled: true, code: codeText, url, readme: readmeText });
-    } catch (e) {
-      console.error('Failed to sync plugin', url, e);
+    let owner: string; let repo: string;
+    const branch = 'main';
+    if (url.includes('github.com')) {
+      const parts = url.replace('https://github.com/', '').split('/');
+      owner = parts[0]; repo = parts[1];
+    } else {
+      throw new Error('Only GitHub plugin URLs are supported.');
     }
+
+    const readmeRes = await fetch(`https://raw.githubusercontent.com/${owner}/${repo}/${branch}/README.md`);
+    const codeRes = await fetch(`https://raw.githubusercontent.com/${owner}/${repo}/${branch}/plugin.js`);
+    if (!readmeRes.ok || !codeRes.ok) {
+      throw new Error(`Could not fetch plugin files from ${owner}/${repo} (README ${readmeRes.status}, plugin.js ${codeRes.status}).`);
+    }
+
+    const readmeText = await readmeRes.text();
+    const codeText = await codeRes.text();
+
+    let name = repo;
+    const match = readmeText.match(/^---\n([\s\S]+?)\n---/);
+    if (match) {
+      match[1].split('\n').forEach(line => {
+        const [key, ...rest] = line.split(':');
+        if (key.trim() === 'name') name = rest.join(':').trim().replace(/^['"]|['"]$/g, '');
+      });
+    }
+    // The source's @noteroot-plugin header is authoritative over the README name
+    const meta = parsePluginMeta(codeText);
+    const id = meta.id || `plugin-${name.replace(/\s+/g, '-').toLowerCase()}`;
+    await get().installPlugin({ id, source: 'community', enabled: true, code: codeText, url, readme: readmeText });
   },
 
   togglePlugin: async (id, enabled) => {

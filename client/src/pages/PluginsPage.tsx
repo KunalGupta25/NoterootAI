@@ -7,6 +7,7 @@ import {
   Settings as SettingsIcon, Trash2
 } from 'lucide-react';
 import { DRIVE_CONNECTOR_CODE } from '../plugins/custom/driveConnectorCode';
+import { parsePluginMeta } from '../plugins/runtime/pluginMeta';
 
 interface PluginCardData {
   id: string;
@@ -120,6 +121,8 @@ export default function PluginsPage() {
 
       if (uploadedFile.name.endsWith('.js')) {
         code = await uploadedFile.text();
+        const meta = parsePluginMeta(code);
+        if (meta.id) pluginId = meta.id;
       } else if (uploadedFile.name.endsWith('.zip')) {
         const JSZip = (await import('jszip')).default;
         const zip = await JSZip.loadAsync(uploadedFile);
@@ -146,6 +149,10 @@ export default function PluginsPage() {
             });
           }
         }
+
+        // The source's @noteroot-plugin header is authoritative over README/filename
+        const meta = parsePluginMeta(code);
+        if (meta.id) pluginId = meta.id;
       } else if (uploadedFile.name.endsWith('.json')) {
         const text = await uploadedFile.text();
         readme = `Local configuration/manifest:\n\`\`\`json\n${text}\n\`\`\``;

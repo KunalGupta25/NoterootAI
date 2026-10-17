@@ -99,7 +99,9 @@ function App() {
       const missingUrls = syncedUrls.filter(url => !localUrls.includes(url));
       
       for (const url of missingUrls) {
-        usePluginStore.getState().installFromUrl(url);
+        usePluginStore.getState().installFromUrl(url).catch(err => {
+          console.warn('Failed to auto-install plugin from', url, err);
+        });
       }
     }
   }, [isLoaded, token, plugins.length]);

@@ -7,6 +7,33 @@ import { useAuthStore } from '../../stores/authStore';
 import { AI_URL } from '../../lib/constants';
 import { isBuiltinProvider } from '../../lib/providerConfig';
 
+// ── Google Identity Services (loaded on demand, memoised) ─────────────────────
+// Plugins never get window/document, so sign-in popups are brokered by the host.
+const ALLOWED_GOOGLE_SCOPES = new Set([
+  'https://www.googleapis.com/auth/drive.file',
+  'https://www.googleapis.com/auth/userinfo.email',
+  'https://www.googleapis.com/auth/userinfo.profile',
+]);
+
+let gisLoader: Promise<void> | null = null;
+function loadGoogleIdentity(): Promise<void> {
+  const w = window as any;
+  if (w.google?.accounts?.oauth2) return Promise.resolve();
+  if (gisLoader) return gisLoader;
+  gisLoader = new Promise<void>((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = 'https://accounts.google.com/gsi/client';
+    script.async = true;
+    script.onload = () => resolve();
+    script.onerror = () => {
+      gisLoader = null;
+      reject(new Error('Could not load Google sign-in (blocked by the network or an ad blocker?).'));
+    };
+    document.head.appendChild(script);
+  });
+  return gisLoader;
+}
+
 /**
  * The safe API injected into plugins.
  * Exposes core capabilities without allowing window/DOM access.
@@ -22,6 +49,65 @@ export class PluginContext {
   public runtime = {
     registerExtension: (point: ExtensionPoint, descriptor: any) => {
       PluginRuntime.registerExtension(this.pluginId, point, descriptor);
+    },
+    /** Register cleanup (clear timers, unsubscribe). Runs when the plugin is re-run or disabled. */
+    onDispose: (fn: () => void) => {
+      if (typeof fn === 'function') PluginRuntime.registerDisposer(this.pluginId, fn);
+    }
+  };
+
+  // Auth brokering (OAuth popups need window/document, which plugins do not get)
+  public auth = {
+    /** Pre-load Google Identity Services so a later sign-in popup is not blocked. */
+    preloadGoogle: async () => {
+      try { await loadGoogleIdentity(); } catch { /* surfaced on real sign-in */ }
+    },
+    /**
+     * Requests a short-lived Google OAuth access token (token model, no refresh token).
+     * Only an allow-list of scopes can be requested.
+     */
+    requestGoogleToken: async (opts: {
+      clientId: string;
+      scopes: string[];
+      prompt?: '' | 'none' | 'consent' | 'select_account';
+      hint?: string;
+      timeoutMs?: number;
+    }): Promise<{ accessToken: string; expiresIn: number; scope: string }> => {
+      if (!opts?.clientId) throw new Error('A Google OAuth Client ID is required.');
+      const scopes = Array.isArray(opts.scopes) ? opts.scopes : [];
+      if (scopes.length === 0 || !scopes.every(s => ALLOWED_GOOGLE_SCOPES.has(s))) {
+        throw new Error('Requested Google scope is not allowed for plugins.');
+      }
+      await loadGoogleIdentity();
+      const g = (window as any).google;
+      return await new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error('Google sign-in timed out.')), opts.timeoutMs ?? 120000);
+        try {
+          const client = g.accounts.oauth2.initTokenClient({
+            client_id: opts.clientId,
+            scope: scopes.join(' '),
+            prompt: opts.prompt ?? '',
+            hint: opts.hint || undefined,
+            callback: (resp: any) => {
+              clearTimeout(timer);
+              if (resp?.error) reject(new Error(resp.error_description || resp.error));
+              else resolve({
+                accessToken: resp.access_token,
+                expiresIn: Number(resp.expires_in) || 3600,
+                scope: resp.scope || ''
+              });
+            },
+            error_callback: (err: any) => {
+              clearTimeout(timer);
+              reject(new Error(err?.message || err?.type || 'Google sign-in was cancelled.'));
+            }
+          });
+          client.requestAccessToken();
+        } catch (e) {
+          clearTimeout(timer);
+          reject(e);
+        }
+      });
     }
   };
 
@@ -94,6 +180,36 @@ export class PluginContext {
     deleteNote: async (id: string) => {
       await useNoteStore.getState().deleteNote(id);
       return true;
+    },
+    /**
+     * Imports a note verbatim (HTML content, original id/parent/created time).
+     * Creates it if the id is unknown, otherwise overwrites that note.
+     */
+    importNote: async (note: {
+      id: string;
+      title?: string;
+      content?: string;
+      space?: string;
+      tags?: string[];
+      parentId?: string | null;
+      icon?: string;
+      properties?: Record<string, string>;
+      createdAt?: number;
+      updatedAt?: number;
+    }) => {
+      if (!note || typeof note.id !== 'string' || !note.id) throw new Error('importNote requires a note id');
+      return await useNoteStore.getState().saveNote({
+        _id: note.id,
+        title: note.title ?? 'Untitled',
+        content: note.content ?? '',
+        space: note.space || 'Other',
+        tags: note.tags ?? [],
+        parentId: note.parentId ?? null,
+        icon: note.icon,
+        properties: note.properties,
+        createdAt: note.createdAt,
+        updatedAt: note.updatedAt
+      }, { preserveTimestamps: true });
     }
   };
 
@@ -106,7 +222,12 @@ export class PluginContext {
       window.dispatchEvent(new CustomEvent('OPEN_PLUGIN_MODAL', { detail: { modalId } }));
     },
     openUrl: (url: string) => {
+      if (!/^https?:\/\//i.test(String(url))) return; // never open javascript:/data: URLs for plugins
       window.open(url, '_blank', 'noopener,noreferrer');
+    },
+    /** Ask the settings panel to re-render (plugin-held UI state changed). */
+    requestRender: () => {
+      window.dispatchEvent(new CustomEvent('PLUGIN_RERENDER'));
     }
   };
 

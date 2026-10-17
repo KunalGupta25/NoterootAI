@@ -67,10 +67,10 @@ export type DescriptorNode =
   | { type: 'Text'; text: string }
   | { type: 'Markdown'; text: string }
   | { type: 'Button'; label: string; onClick: () => void; disabled?: boolean }
-  | { type: 'Input'; value: string; onChange: (v: string) => void; placeholder?: string }
+  | { type: 'Input'; value: string; onChange: (v: string) => void; placeholder?: string; secret?: boolean }
   | { type: 'Select'; value: string; options: string[]; onChange: (v: string) => void }
   | { type: 'RadioGroup'; value: string; options: string[]; onChange: (v: string) => void }
-  | { type: 'Toggle'; checked: boolean; onChange: (v: boolean) => void }
+  | { type: 'Toggle'; checked: boolean; onChange: (v: boolean) => void; label?: string }
   | { type: 'Divider' }
   | { type: 'Badge'; text: string }
   | { type: 'Link'; text: string; url: string }

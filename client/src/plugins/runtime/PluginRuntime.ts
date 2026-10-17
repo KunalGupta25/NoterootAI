@@ -13,10 +13,30 @@ class PluginRuntimeManager {
   // Listeners for when extensions change (reactivity)
   private listeners = new Set<() => void>();
 
+  // Cleanup callbacks plugins register via ctx.runtime.onDispose (timers, subscriptions)
+  private disposers = new Map<string, Set<() => void>>();
+
+  public registerDisposer(pluginId: string, fn: () => void) {
+    if (!this.disposers.has(pluginId)) this.disposers.set(pluginId, new Set());
+    this.disposers.get(pluginId)!.add(fn);
+  }
+
+  private runDisposers(pluginId: string) {
+    const set = this.disposers.get(pluginId);
+    if (!set) return;
+    this.disposers.delete(pluginId);
+    set.forEach(fn => {
+      try { fn(); } catch (e) { console.warn(`Plugin ${pluginId} dispose handler failed:`, e); }
+    });
+  }
+
   /**
    * Called by App.tsx to initialize the system and run active plugins.
    */
   public async init(plugins: any[]) {
+    // Stop anything left running from a previous init (timers, subscriptions)
+    for (const id of Array.from(this.disposers.keys())) this.runDisposers(id);
+
     // Clear everything
     this.extensions.clear();
     this.pluginErrors.clear();
@@ -34,6 +54,7 @@ class PluginRuntimeManager {
    */
   public async executePlugin(plugin: { id: string, code?: string }) {
     if (!plugin.code) return;
+    this.runDisposers(plugin.id); // a re-run replaces the previous instance
     try {
       this.pluginErrors.delete(plugin.id);
       const ctx = createRestrictedContext(plugin.id);
@@ -63,6 +84,7 @@ class PluginRuntimeManager {
    * Disables a plugin and unregisters all its extensions.
    */
   public disablePlugin(pluginId: string) {
+    this.runDisposers(pluginId);
     let changed = false;
     for (const [_, registry] of this.extensions.entries()) {
       if (registry.has(pluginId)) {

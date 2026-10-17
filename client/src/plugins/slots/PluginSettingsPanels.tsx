@@ -18,9 +18,11 @@ export function PluginSettingsPanels() {
     });
     const handleToast = () => setTick(t => t + 1);
     window.addEventListener('PLUGIN_TOAST', handleToast);
+    window.addEventListener('PLUGIN_RERENDER', handleToast);
     return () => {
       unsub();
       window.removeEventListener('PLUGIN_TOAST', handleToast);
+      window.removeEventListener('PLUGIN_RERENDER', handleToast);
     };
   }, []);
 

@@ -106,6 +106,7 @@ export default function NoteEditorPage() {
 
   useEffect(() => {
     let active = true;
+    setIsLoaded(false);
     if (id && id !== 'new') {
       getNote(id).then(note => {
         if (!active) return;
@@ -128,6 +129,7 @@ export default function NoteEditorPage() {
         if (!active) return;
         setTitle('Untitled');
         setContent('');
+        setTags([]);
         setSpace('Other');
         setIsLoaded(true);
       }, 0);
@@ -143,8 +145,6 @@ export default function NoteEditorPage() {
       _id: id,
       title: newTitle ?? titleRef.current,
       content: newContent ?? contentRef.current,
-      icon: '📄',
-      parentId: null,
       tags: newTags ?? tags,
       space: newSpace ?? spaceRef.current,
     });
@@ -828,6 +828,7 @@ export default function NoteEditorPage() {
           {/* TipTap Rich Editor */}
           <div style={{ minHeight: '350px' }}>
             <NoteEditor
+              key={id}
               initialContent={content}
               onChange={handleContentChange}
               onEditorReady={handleEditorReady}

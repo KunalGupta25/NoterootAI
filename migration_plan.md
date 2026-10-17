@@ -1,5 +1,7 @@
 # NoteRootAI — FastAPI Migration & Unified Container Plan
 
+> **Status (2026-10-17): Migration complete.** `backend/` is the single production service (Render + root `railway.toml` + root `docker-compose.yml`). The legacy `server/` (Express) and `ai-service/` (microservice) directories have been retired and removed; their CI job is gone. This document is retained as the historical migration record. The client keeps `AI_URL`/`SYNC_URL` fallbacks in `client/src/lib/constants.ts` until `VITE_BACKEND_URL` is the only configured env var.
+
 > **Goal:** Replace Node.js/Express with a unified Python FastAPI backend, merge the AI microservice into it, run everything in a single Docker container, improve load handling, and enhance the UI/UX.
 
 > **Current deployment target:** Run one FastAPI worker with bounded MongoDB and Neo4j connection pools. Use the single OpenAI-compatible SDK for OpenAI, Gemini, Mistral, Groq, and compatible custom endpoints. Raw Anthropic support is removed. `/docs` remains available. New notes are indexed in Neo4j; no historic-note re-embedding job is planned.

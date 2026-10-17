@@ -101,7 +101,7 @@ CORS_ORIGINS=["http://localhost:5173","https://noteroot-ai.vercel.app"]
 
 Create `client/.env`:
 ```env
-VITE_API_URL=http://localhost:8000
+VITE_BACKEND_URL=http://localhost:8000
 ```
 
 ### 3. Run Development Servers

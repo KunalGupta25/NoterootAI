@@ -2,17 +2,16 @@
 
 ## Project Structure & Module Organization
 
-NoteRootAI is a three-service repository. `client/` contains the React, TypeScript, and Vite application; UI code lives in `client/src/components/`, route pages in `pages/`, and state in `stores/`. `server/src/` contains the Express API, organized into `controllers/`, `models/`, `routes/`, `middleware/`, and `utils/`. `ai-service/` is the FastAPI service, with provider integrations in `providers/` and application logic in `services/`. `sample-plugin/` holds a minimal plugin example and `plugin-template/` is the boilerplate for new plugins. Static client assets belong in `client/public/` or `client/src/assets/` as appropriate.
+NoteRootAI is a two-service repository. `client/` contains the React, TypeScript, and Vite application; UI code lives in `client/src/components/`, route pages in `pages/`, and state in `stores/`. `backend/` is the unified FastAPI service (auth, notes, graph, plugins marketplace, and AI endpoints) organized into `routers/`, `services/`, `providers/`, `schemas/`, and `core/`. `sample-plugin/` holds a minimal plugin example and `plugin-template/` is the boilerplate for new plugins. Static client assets belong in `client/public/` or `client/src/assets/` as appropriate.
 
 ## Build, Test, and Development Commands
 
-- `npm run install:all` installs the root, client, and server Node dependencies.
-- `npm run dev` starts client, server, and AI service together (the AI service expects its Windows virtual environment at `ai-service/venv`). Start one service with `npm run dev:client`, `npm run dev:server`, or `npm run dev:ai`.
+- `npm run install:all` installs the root and client Node dependencies.
+- `npm run dev` starts the client and backend together (the backend expects its virtual environment at `backend/.venv`; create it with `npm run setup:backend`). Start one service with `npm run dev:client` or `npm run dev:backend`.
 - `npm --prefix client run build` type-checks and builds the frontend; `npm --prefix client run lint` runs ESLint.
-- `npm --prefix server run build` compiles the TypeScript API to `server/dist/`.
-- For a standalone AI setup, create and activate a Python virtual environment in `ai-service/`, install `requirements.txt`, then run `uvicorn main:app --reload` from that directory.
+- For the backend, activate `backend/.venv`, install `requirements.txt` (or `requirements-dev.txt` for tests), then run `uvicorn main:app --reload` from `backend/`. Run tests with `pytest -q` from `backend/`.
 
-There is no configured automated test suite yet; the server's `test` script is a placeholder. Do not treat it as a passing test run.
+Client tests run with `npm --prefix client run test` (vitest); backend tests run with `pytest -q` from `backend/`. Keep test files near the code they cover.
 
 ## Coding Style & Naming Conventions
 
@@ -20,7 +19,7 @@ Follow the surrounding code style: TypeScript/TSX uses two-space indentation, se
 
 ## Testing Guidelines
 
-No test framework or coverage threshold is configured. For frontend changes, run the client lint and build commands above. For backend changes, run the server build. For AI-service changes, verify imports and exercise the affected endpoint or provider locally; add focused automated tests when introducing test infrastructure. Keep test files near the code they cover or in a clearly named `tests/` directory.
+For frontend changes, run the client lint, test, and build commands above. For backend changes, run `pytest -q` from `backend/` and the import check from the CI workflow. Keep test files near the code they cover or in a clearly named `tests/` directory.
 
 ## Commit & Pull Request Guidelines
 

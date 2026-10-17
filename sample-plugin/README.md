@@ -266,7 +266,7 @@ Plugin UIs (settings panels, modals, overlays) are described using a **plain JS 
 
 ## 🔗 More Examples
 
-- **[summarizer-plugin](../summarizer-plugin/)** — A real-world plugin that uses `ctx.ai.chat()` to summarize selected text and insert results back into the editor.
+- **[plugin-template](../plugin-template/)** — the copy-and-rename boilerplate for new plugins, with feature flags and every pattern pre-wired.
 
 ---
 

@@ -55,7 +55,7 @@ Full API reference: [`references/api.md`](references/api.md) — read it before 
 |---|---|
 | Upload tab | `plugin.js`, or `.zip` containing `plugin.js` + `README.md` |
 | GitHub tab | Public repo, `README.md` + `plugin.js` at the `main` branch root (host fetches raw) |
-| Marketplace | `POST /api/plugins/publish` on the backend (`backend/routers/plugins.py`, Express twin in `server/src/routes/plugins.ts`) |
+| Marketplace | `POST /api/plugins/publish` on the backend (`backend/routers/plugins.py`) |
 
 ## File map
 

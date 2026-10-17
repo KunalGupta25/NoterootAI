@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-NoteRootAI is a three-service repository. `client/` contains the React, TypeScript, and Vite application; UI code lives in `client/src/components/`, route pages in `pages/`, and state in `stores/`. `server/src/` contains the Express API, organized into `controllers/`, `models/`, `routes/`, `middleware/`, and `utils/`. `ai-service/` is the FastAPI service, with provider integrations in `providers/` and application logic in `services/`. `sample-plugin/` holds a minimal plugin example. Static client assets belong in `client/public/` or `client/src/assets/` as appropriate.
+NoteRootAI is a three-service repository. `client/` contains the React, TypeScript, and Vite application; UI code lives in `client/src/components/`, route pages in `pages/`, and state in `stores/`. `server/src/` contains the Express API, organized into `controllers/`, `models/`, `routes/`, `middleware/`, and `utils/`. `ai-service/` is the FastAPI service, with provider integrations in `providers/` and application logic in `services/`. `sample-plugin/` holds a minimal plugin example and `plugin-template/` is the boilerplate for new plugins. Static client assets belong in `client/public/` or `client/src/assets/` as appropriate.
 
 ## Build, Test, and Development Commands
 
@@ -29,3 +29,7 @@ Recent commits generally use Conventional Commit prefixes such as `fix:`, `feat(
 ## Security & Configuration
 
 Keep credentials and local environment files out of Git. Configure database, AI-provider, and service URLs through environment variables; never add real API keys or user data to source, logs, or examples.
+
+## Skills
+
+- **noteroot-plugin** (`.opencode/skills/noteroot-plugin/SKILL.md`) — build, modify, and package NoteRoot plugins. Load it whenever the task involves `plugin.js`, `plugin-template/`, `sample-plugin/`, extension points, `ctx.*`, or the plugin runtime under `client/src/plugins/`.
